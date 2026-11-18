@@ -1,0 +1,73 @@
+name: Xiaoman
+
+options:
+  bundleIdPrefix: com.xiaoman
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    SWIFT_STRICT_CONCURRENCY: minimal
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "9"
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+    CLANG_ENABLE_MODULES: YES
+
+targets:
+  Xiaoman:
+    type: application
+    platform: iOS
+    sources:
+      - path: Xiaoman
+        excludes:
+          - "**/.DS_Store"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.xiaoman.app
+        PRODUCT_NAME: Xiaoman
+        INFOPLIST_FILE: Support/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        CODE_SIGN_STYLE: Automatic
+        SUPPORTS_MACCATALYST: NO
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+        IPHONEOS_DEPLOYMENT_TARGET: "26.0"
+
+  XiaomanTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: XiaomanTests
+    dependencies:
+      - target: Xiaoman
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.xiaoman.app.tests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Xiaoman.app/Xiaoman"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+
+schemes:
+  Xiaoman:
+    build:
+      targets:
+        Xiaoman: all
+        XiaomanTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - XiaomanTests
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release

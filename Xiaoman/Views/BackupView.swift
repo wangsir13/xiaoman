@@ -13,6 +13,7 @@ struct BackupView: View {
     @State private var pendingData: Data?
     @State private var pendingSummary = ""
     @State private var message: String?
+    @State private var status: String?
 
     var body: some View {
         ZStack {
@@ -98,6 +99,13 @@ struct BackupView: View {
                         .padding(.vertical, 10)
                 }
                 .buttonStyle(.glass)
+
+                if let status {
+                    Text(status)
+                        .font(.system(size: 11, design: .rounded))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
     }
@@ -122,15 +130,21 @@ struct BackupView: View {
     private func handleImport(_ result: Result<[URL], Error>) {
         switch result {
         case .failure(let error):
+            status = "选择器返回错误：\(error.localizedDescription)"
             message = "读取失败：\(error.localizedDescription)"
         case .success(let urls):
-            guard let url = urls.first else { return }
+            guard let url = urls.first else {
+                status = "选择器返回了空结果。"
+                return
+            }
+            status = "已选择：\(url.lastPathComponent)，正在读取…"
             let access = url.startAccessingSecurityScopedResource()
             defer { if access { url.stopAccessingSecurityScopedResource() } }
             do {
                 let data = try Data(contentsOf: url, options: .mappedIfSafe)
                 pendingData = data
                 pendingSummary = "即将用「\(url.lastPathComponent)」（\(byteText(data.count))）覆盖当前账本，里面的账目、资产、预算和自定义分类都会被替换。"
+                status = "已读取：\(url.lastPathComponent)（\(byteText(data.count))）"
                 // fileImporter 收起动画还没结束时直接弹 alert 会被系统吞掉，等一小会儿再弹
                 Task { @MainActor in
                     try? await Task.sleep(for: .milliseconds(420))

@@ -11,6 +11,8 @@ struct CSVImportView: View {
     @State private var fileName = ""
     @State private var message: String?
     @State private var busy = false
+    /// 行内状态：不依赖 alert，能确认「选择器回调到底有没有回来」
+    @State private var status: String?
 
     var body: some View {
         ZStack {
@@ -69,10 +71,11 @@ struct CSVImportView: View {
                 .buttonStyle(.glassProminent)
                 .disabled(busy)
 
-                if !fileName.isEmpty {
-                    Text("已读取：\(fileName)")
+                if let status {
+                    Text(status)
                         .font(.system(size: 11, design: .rounded))
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
@@ -157,9 +160,14 @@ struct CSVImportView: View {
     private func handle(_ result: Result<[URL], Error>) {
         switch result {
         case .failure(let error):
+            status = "选择器返回错误：\(error.localizedDescription)"
             message = "读取失败：\(error.localizedDescription)"
         case .success(let urls):
-            guard let url = urls.first else { return }
+            guard let url = urls.first else {
+                status = "选择器返回了空结果。"
+                return
+            }
+            status = "已选择：\(url.lastPathComponent)，正在读取…"
             busy = true
             defer { busy = false }
 
@@ -175,8 +183,10 @@ struct CSVImportView: View {
                 let parsed = try CSVImporter.parse(data: data, fileName: url.lastPathComponent)
                 rows = parsed
                 fileName = url.lastPathComponent
+                status = "已读取：\(url.lastPathComponent)，识别到 \(parsed.count) 笔" + (parsed.isEmpty ? "（表头没认出来，换个文件试试）" : "")
             } catch {
                 rows = []
+                status = "读取失败：\(error.localizedDescription)"
                 showLater(error.localizedDescription)
             }
         }

@@ -168,13 +168,23 @@ final class LedgerStore: ObservableObject {
         }
     }
 
-    /// 用备份文件覆盖当前账本，成功返回恢复的笔数
+    /// 用备份文件覆盖当前账本，成功返回恢复的笔数；失败抛出可读的原因
     @discardableResult
-    func restoreBackup(from data: Data) -> Int? {
+    func restoreBackup(from data: Data) throws -> Int {
+        guard !data.isEmpty else {
+            throw BackupError.emptyFile
+        }
+
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        guard let envelope = try? decoder.decode(BackupEnvelope.self, from: data) else {
-            return nil
+
+        let envelope: BackupEnvelope
+        do {
+            envelope = try decoder.decode(BackupEnvelope.self, from: data)
+        } catch let error as DecodingError {
+            throw BackupError.badEnvelope(Self.describe(error))
+        } catch {
+            throw BackupError.badEnvelope(error.localizedDescription)
         }
 
         transactions = envelope.transactions
@@ -189,6 +199,26 @@ final class LedgerStore: ObservableObject {
         saveCategories()
         flash("已从备份恢复 \(transactions.count) 笔账")
         return transactions.count
+    }
+
+    /// 把 DecodingError 翻译成「哪个字段没对上」，方便用户在短提示里看到重点
+    static func describe(_ error: DecodingError) -> String {
+        func path(_ keys: [CodingKey]) -> String {
+            keys.map { $0.intValue.map { "[\($0)]" } ?? ".\($0.stringValue)" }.joined().dropFirst().description
+        }
+
+        switch error {
+        case let .keyNotFound(key, context):
+            return "缺少字段 \(key.stringValue)（位置：\(path(context.codingPath))）"
+        case let .typeMismatch(type, context):
+            return "字段类型不符，期望 \(type)，位置：\(path(context.codingPath))"
+        case let .valueNotFound(type, context):
+            return "字段没有值，期望 \(type)，位置：\(path(context.codingPath))"
+        case let .dataCorrupted(context):
+            return "JSON 内容损坏：\(context.debugDescription)（位置：\(path(context.codingPath))）"
+        @unknown default:
+            return "解析失败"
+        }
     }
 
     // MARK: - 默认资产（第一次打开时给几个空的，用户改名字即可）

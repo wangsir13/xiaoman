@@ -51,8 +51,6 @@ struct MonthSummaryCard: View {
                 .font(.system(size: 13, weight: .medium, design: .rounded))
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
     }
 }
 

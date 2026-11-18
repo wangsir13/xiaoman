@@ -1,4 +1,5 @@
 import SwiftUI
+import Foundation
 import UniformTypeIdentifiers
 
 /// 备份与恢复：整份账本导出成一个 JSON，换机、重签之前先存一份
@@ -10,6 +11,7 @@ struct BackupView: View {
     @State private var showingImporter = false
     @State private var showingRestoreConfirm = false
     @State private var pendingData: Data?
+    @State private var pendingSummary = ""
     @State private var message: String?
 
     var body: some View {
@@ -33,7 +35,7 @@ struct BackupView: View {
         }
         .fileImporter(
             isPresented: $showingImporter,
-            allowedContentTypes: [.json],
+            allowedContentTypes: [.json, .plainText, .data, .item],
             allowsMultipleSelection: false
         ) { result in
             handleImport(result)
@@ -42,7 +44,9 @@ struct BackupView: View {
             Button("取消", role: .cancel) { pendingData = nil }
             Button("覆盖恢复", role: .destructive) { performRestore() }
         } message: {
-            Text("现在的账目、资产、预算和自定义分类都会被备份文件里的内容替换。")
+            Text(pendingSummary.isEmpty
+                 ? "现在的账目、资产、预算和自定义分类都会被备份文件里的内容替换。"
+                 : pendingSummary)
         }
         .alert("提示", isPresented: Binding(
             get: { message != nil },
@@ -123,22 +127,37 @@ struct BackupView: View {
             guard let url = urls.first else { return }
             let access = url.startAccessingSecurityScopedResource()
             defer { if access { url.stopAccessingSecurityScopedResource() } }
-            guard let data = try? Data(contentsOf: url) else {
-                message = "读不到这个文件，换个位置再试一次。"
-                return
+            do {
+                let data = try Data(contentsOf: url, options: .mappedIfSafe)
+                pendingData = data
+                pendingSummary = "即将用「\(url.lastPathComponent)」（\(byteText(data.count))）覆盖当前账本，里面的账目、资产、预算和自定义分类都会被替换。"
+                // fileImporter 收起动画还没结束时直接弹 alert 会被系统吞掉，等一小会儿再弹
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(420))
+                    showingRestoreConfirm = true
+                }
+            } catch {
+                let hint = "如果它存在 iCloud 里，先点一下让它下载完再选。"
+                message = "读不到这个文件：\(error.localizedDescription)\n" + hint
             }
-            pendingData = data
-            showingRestoreConfirm = true
         }
     }
 
     private func performRestore() {
         guard let data = pendingData else { return }
         pendingData = nil
-        if let count = store.restoreBackup(from: data) {
+        pendingSummary = ""
+        do {
+            let count = try store.restoreBackup(from: data)
             message = "恢复完成，共 \(count) 笔账。"
-        } else {
-            message = "这个文件不是小满的备份，或者已经损坏。"
+        } catch {
+            message = error.localizedDescription
         }
+    }
+
+    private func byteText(_ count: Int) -> String {
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        return formatter.string(fromByteCount: Int64(count))
     }
 }

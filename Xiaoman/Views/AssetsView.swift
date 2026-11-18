@@ -140,9 +140,12 @@ struct AssetEditorView: View {
     @State private var note: String
     @State private var colorHex: String
 
+    private let originalOpening: Int
+
     init(asset: Asset, isNew: Bool = false) {
         self.originalID = asset.id
         self.isNew = isNew
+        self.originalOpening = asset.openingBalanceCents
         _name = State(initialValue: asset.name)
         _kind = State(initialValue: asset.kind)
         _openingText = State(initialValue: asset.openingBalanceCents == 0 ? "" : Money.plain(asset.openingBalanceCents))
@@ -247,7 +250,12 @@ struct AssetEditorView: View {
         let hasSign = typed.contains("-") || typed.contains("−") || typed.contains("－")
         let parsed = Money.cents(from: typed) ?? 0
         // 欠款类（信用卡 / 借款）默认按「欠多少」记，填正数也算负数
-        asset.openingBalanceCents = (kind.isLiability && !hasSign) ? -abs(parsed) : parsed
+        let newOpening = (kind.isLiability && !hasSign) ? -abs(parsed) : parsed
+        // 期初余额一改，就从现在开始生效：之前的账单不再跟着扣减，只有之后的新账会动这个数
+        if newOpening != originalOpening {
+            asset.openingBalanceCents = newOpening
+            asset.openingAt = Date()
+        }
         asset.note = note
         asset.colorHex = colorHex
         asset.keywords = keywordText

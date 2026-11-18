@@ -16,6 +16,7 @@ struct TransactionEditorView: View {
     @State private var occurredAt: Date
     @State private var note: String
     @State private var assetID: UUID?
+    @State private var isFixed: Bool
 
     init(transaction: Transaction, isNew: Bool = false) {
         self.base = transaction
@@ -28,6 +29,7 @@ struct TransactionEditorView: View {
         _occurredAt = State(initialValue: transaction.occurredAt)
         _note = State(initialValue: transaction.note)
         _assetID = State(initialValue: transaction.assetID)
+        _isFixed = State(initialValue: transaction.isFixedFlag)
     }
 
     private var isValid: Bool {
@@ -94,6 +96,17 @@ struct TransactionEditorView: View {
                     }
 
                     DatePicker("时间", selection: $occurredAt, displayedComponents: [.date, .hourAndMinute])
+
+                    Toggle(isOn: $isFixed) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("固定支出")
+                                .font(.system(size: 15, design: .rounded))
+                            Text("房租、话费、订阅这类每月固定的钱：照常记账，但不占当月每日预算。")
+                                .font(.system(size: 11, design: .rounded))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .tint(Theme.accent)
                 }
 
                 Section("备注") {
@@ -145,6 +158,7 @@ struct TransactionEditorView: View {
         item.occurredAt = occurredAt
         item.note = note
         item.assetID = assetID
+        item.isFixed = isFixed
         item.fingerprint = ""
         store.upsert(item)
         dismiss()

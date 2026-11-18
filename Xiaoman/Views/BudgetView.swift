@@ -10,7 +10,7 @@ struct BudgetView: View {
     @State private var reminderEnabled = false
     @State private var reminderTime = Date()
     @State private var authDenied = false
-    @State private var fillBeforeToday = true
+    @State private var daysExpanded = false
     @FocusState private var budgetFieldFocused: Bool
 
     private var plan: BudgetPlan { store.budgetPlan }
@@ -78,17 +78,21 @@ struct BudgetView: View {
                     .font(.system(size: 12, design: .rounded))
                     .foregroundStyle(.secondary)
 
-                Toggle(isOn: $fillBeforeToday) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("从今日起")
-                            .font(.system(size: 14, weight: .medium, design: .rounded))
-                        Text("打开的当天开始算预算，之前的日期不再占用额度，今日额度就是每天均分的 \(Money.display(baseDaily))。")
-                            .font(.system(size: 11, design: .rounded))
-                            .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 8) {
+                    Button {
+                        clearBeforeToday()
+                    } label: {
+                        Label("清空今日前预算", systemImage: "arrow.counterclockwise")
+                            .font(.system(size: 14, weight: .semibold, design: .rounded))
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 9)
                     }
+                    .buttonStyle(.glass)
+
+                    Text("点一下把今天之前的额度清空：之前的日期不再占额度、也不往后结转，今天重新从「月预算 ÷ 天数」的 \(Money.display(baseDaily)) 开始。")
+                        .font(.system(size: 11, design: .rounded))
+                        .foregroundStyle(.secondary)
                 }
-                .tint(Theme.accent)
-                .onChange(of: fillBeforeToday) { _ in savePlan() }
 
                 HStack {
                     Spacer()
@@ -122,10 +126,10 @@ struct BudgetView: View {
     // MARK: - 本月概览
 
     private var overviewCard: some View {
-        let summary = store.monthSummary()
-        let remaining = plan.monthlyCents - summary.expense
+        let spentInBudget = store.budgetSpentThisMonth
+        let remaining = plan.monthlyCents - spentInBudget
         let progress = plan.monthlyCents > 0
-            ? min(1, Double(summary.expense) / Double(plan.monthlyCents))
+            ? min(1, Double(spentInBudget) / Double(plan.monthlyCents))
             : 0
 
         return GlassCard(padding: 18) {
@@ -135,7 +139,7 @@ struct BudgetView: View {
                         .font(.system(size: 13, weight: .medium, design: .rounded))
                         .foregroundStyle(.secondary)
                     Spacer()
-                    Text(Money.plain(summary.expense) + " / " + Money.plain(plan.monthlyCents))
+                    Text(Money.plain(spentInBudget) + " / " + Money.plain(plan.monthlyCents))
                         .font(.system(size: 13, weight: .semibold, design: .rounded))
                         .monospacedDigit()
                 }
@@ -228,11 +232,20 @@ struct BudgetView: View {
 
     // MARK: - 每日列表
 
+    private var visibleDays: [DailyBudget] {
+        if daysExpanded { return days }
+        let calendar = Calendar.current
+        guard let todayIndex = days.firstIndex(where: { calendar.isDateInToday($0.date) }) else {
+            return Array(days.suffix(7))
+        }
+        return Array(days[...todayIndex].suffix(7))
+    }
+
     private var daysCard: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SectionTitle(title: "每日预算", trailing: "红色 = 超支")
+            SectionTitle(title: "每日预算", trailing: daysExpanded ? "红色 = 超支" : "近 7 日")
             VStack(spacing: 0) {
-                ForEach(days) { day in
+                ForEach(visibleDays) { day in
                     HStack(spacing: 12) {
                         Text("\(Calendar.current.component(.day, from: day.date))")
                             .font(.system(size: 14, weight: .bold, design: .rounded))
@@ -241,7 +254,9 @@ struct BudgetView: View {
                             .foregroundStyle(Calendar.current.isDateInToday(day.date) ? Theme.accent : .primary)
 
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(Money.plain(day.spentCents) + " / " + Money.plain(day.availableCents))
+                            Text(day.availableCents == 0 && day.spentCents == 0
+                                 ? "已清空"
+                                 : Money.plain(day.spentCents) + " / " + Money.plain(day.availableCents))
                                 .font(.system(size: 13, weight: .medium, design: .rounded))
                                 .monospacedDigit()
                             if day.carryInCents != 0 {
@@ -262,13 +277,35 @@ struct BudgetView: View {
                     }
                     .padding(.vertical, 8)
 
-                    if day.id != days.last?.id {
+                    if day.id != visibleDays.last?.id {
                         Divider().opacity(0.12)
                     }
                 }
             }
             .padding(.horizontal, 14)
             .glassEffect(.regular, in: .rect(cornerRadius: 26, style: .continuous))
+
+            if days.count > 7 {
+                HStack {
+                    Spacer(minLength: 0)
+                    Button {
+                        withAnimation(.snappy(duration: 0.26)) { daysExpanded.toggle() }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text(daysExpanded ? "收起" : "展开整月")
+                            Image(systemName: daysExpanded ? "chevron.up" : "chevron.down")
+                                .font(.system(size: 10, weight: .semibold))
+                        }
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundStyle(.secondary)
+                        .padding(.vertical, 6)
+                        .padding(.horizontal, 14)
+                        .glassEffect(.clear, in: .capsule)
+                    }
+                    .buttonStyle(.plain)
+                    Spacer(minLength: 0)
+                }
+            }
         }
     }
 
@@ -284,10 +321,15 @@ struct BudgetView: View {
         )
     }
 
+    private func clearBeforeToday() {
+        var plan = store.budgetPlan
+        plan.clearedBefore = Date()
+        store.updateBudget(plan)
+    }
+
     private func loadFromStore() {
         monthlyText = plan.monthlyCents == 0 ? "" : Money.plain(plan.monthlyCents)
         reminderEnabled = plan.reminderEnabled
-        fillBeforeToday = plan.fillBeforeToday
         var components = DateComponents()
         components.hour = plan.reminderHour
         components.minute = plan.reminderMinute
@@ -298,7 +340,6 @@ struct BudgetView: View {
         var plan = store.budgetPlan
         plan.monthlyCents = Money.cents(from: monthlyText) ?? 0
         plan.reminderEnabled = reminderEnabled
-        plan.fillBeforeToday = fillBeforeToday
         let components = Calendar.current.dateComponents([.hour, .minute], from: reminderTime)
         plan.reminderHour = components.hour ?? 21
         plan.reminderMinute = components.minute ?? 0

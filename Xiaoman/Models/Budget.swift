@@ -8,9 +8,9 @@ struct BudgetPlan: Codable, Hashable {
     var reminderHour: Int = 21
     var reminderMinute: Int = 0
     var reminderEnabled: Bool = false
-    /// 从今天开始记：今天之前的额度当作已经用完，不往今天结转。
-    /// 这样第一次填预算时，今日额度不会因为「前面几天没花」而暴涨。
-    var fillBeforeToday: Bool = true
+    /// 点过「清空今日前预算」的时间：这个时间之前的每一天都不占额度、也不向后面结转，
+    /// 今日从「月预算 ÷ 当月天数」重新开始，之前的结余不参与计算。
+    var clearedBefore: Date?
 
     var isConfigured: Bool { monthlyCents > 0 }
 
@@ -19,23 +19,23 @@ struct BudgetPlan: Codable, Hashable {
         reminderHour: Int = 21,
         reminderMinute: Int = 0,
         reminderEnabled: Bool = false,
-        fillBeforeToday: Bool = true
+        clearedBefore: Date? = nil
     ) {
         self.monthlyCents = monthlyCents
         self.reminderHour = reminderHour
         self.reminderMinute = reminderMinute
         self.reminderEnabled = reminderEnabled
-        self.fillBeforeToday = fillBeforeToday
+        self.clearedBefore = clearedBefore
     }
 
-    // 老版本的 budget.json 没有 fillBeforeToday，缺失时按默认值补，避免整份文件解码失败
+    // 老版本的 budget.json 里没有 clearedBefore，缺失时按 nil 处理
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         monthlyCents = try container.decodeIfPresent(Int.self, forKey: .monthlyCents) ?? 0
         reminderHour = try container.decodeIfPresent(Int.self, forKey: .reminderHour) ?? 21
         reminderMinute = try container.decodeIfPresent(Int.self, forKey: .reminderMinute) ?? 0
         reminderEnabled = try container.decodeIfPresent(Bool.self, forKey: .reminderEnabled) ?? false
-        fillBeforeToday = try container.decodeIfPresent(Bool.self, forKey: .fillBeforeToday) ?? true
+        clearedBefore = try container.decodeIfPresent(Date.self, forKey: .clearedBefore)
     }
 }
 
@@ -79,7 +79,8 @@ enum BudgetEngine {
     }
 
     /// 把某个月的每一天算成 DailyBudget。未来日子按「还没花」处理，carry 一直往前推。
-    /// 当 plan.fillBeforeToday 为 true 时，今天之前的每一天都当作「额度已用完」，carry 归零。
+    /// 设过 plan.clearedBefore 时，那之前的每一天都按「已清空」处理：额度 0、不结转；
+    /// 固定支出（房租、话费）不占每日额度，因此不参与 spentCents。
     static func dailyBudgets(
         month: Date,
         plan: BudgetPlan,
@@ -91,10 +92,11 @@ enum BudgetEngine {
         guard let interval = calendar.dateInterval(of: .month, for: month) else { return [] }
         let days = daysInMonth(of: month, calendar: calendar)
         let base = baseDailyCents(monthlyCents: plan.monthlyCents, month: month, calendar: calendar)
-        let today = calendar.startOfDay(for: now)
+        let clearedStart = plan.clearedBefore.map { calendar.startOfDay(for: $0) }
 
         var spentByDay: [Date: Int] = [:]
-        for item in transactions where item.direction == .expense && interval.contains(item.occurredAt) {
+        for item in transactions
+        where item.direction == .expense && !item.isFixedFlag && interval.contains(item.occurredAt) {
             let day = calendar.startOfDay(for: item.occurredAt)
             spentByDay[day, default: 0] += item.amountCents
         }
@@ -104,11 +106,15 @@ enum BudgetEngine {
         for offset in 0..<days {
             guard let day = calendar.date(byAdding: .day, value: offset, to: interval.start) else { continue }
             let start = calendar.startOfDay(for: day)
-            var spent = spentByDay[start] ?? 0
-            if plan.fillBeforeToday && start < today {
-                // 额度假装已经花完：结转 = 0，今日从「基准额度」重新开始
-                spent = base + carry
+
+            if let clearedStart, start < clearedStart {
+                // 清空过的日子：不占额度，也不把结余带到今天
+                result.append(DailyBudget(date: start, baseCents: 0, carryInCents: 0, spentCents: 0))
+                carry = 0
+                continue
             }
+
+            let spent = spentByDay[start] ?? 0
             let point = DailyBudget(date: start, baseCents: base, carryInCents: carry, spentCents: spent)
             result.append(point)
             carry = point.carryOutCents
@@ -135,8 +141,15 @@ enum BudgetEngine {
         calendar: Calendar = .current
     ) -> Int {
         guard plan.isConfigured else { return 0 }
+        let clearedStart = plan.clearedBefore
         let spent = transactions
-            .filter { $0.direction == .expense && calendar.isDate($0.occurredAt, equalTo: now, toGranularity: .month) }
+            .filter { item in
+                guard item.direction == .expense, !item.isFixedFlag else { return false }
+                guard calendar.isDate(item.occurredAt, equalTo: now, toGranularity: .month) else { return false }
+                // 清空过的话，被清掉那段时间的花销不再算进这个月的预算
+                if let clearedStart, item.occurredAt < clearedStart { return false }
+                return true
+            }
             .reduce(0) { $0 + $1.amountCents }
         return plan.monthlyCents - spent
     }

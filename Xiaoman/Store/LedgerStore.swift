@@ -309,6 +309,8 @@ final class LedgerStore: ObservableObject {
     func balanceCents(of asset: Asset) -> Int {
         var value = asset.openingBalanceCents
         for item in transactions where item.assetID == asset.id {
+            // 期初余额是「从某一刻起」的数：那之前的历史账单不再重复扣减
+            if let openingAt = asset.openingAt, item.occurredAt < openingAt { continue }
             value += item.signedCents
         }
         return value
@@ -429,11 +431,25 @@ final class LedgerStore: ObservableObject {
         BudgetEngine.monthRemainingCents(plan: budgetPlan, transactions: transactions)
     }
 
-    /// 今天花了多少（不看预算也能用）
+    /// 今天花了多少（固定支出也计入，首页「今日支出」看的是真实花费）
     func spentToday() -> Int {
         let calendar = Calendar.current
         return transactions
             .filter { $0.direction == .expense && calendar.isDateInToday($0.occurredAt) }
+            .reduce(0) { $0 + $1.amountCents }
+    }
+
+    /// 本月「占预算」的支出：不含标记为固定支出的那几笔（房租、话费）
+    var budgetSpentThisMonth: Int {
+        let calendar = Calendar.current
+        let clearedStart = budgetPlan.clearedBefore
+        return transactions
+            .filter { item in
+                guard item.direction == .expense, !item.isFixedFlag else { return false }
+                guard calendar.isDate(item.occurredAt, equalTo: Date(), toGranularity: .month) else { return false }
+                if let clearedStart, item.occurredAt < clearedStart { return false }
+                return true
+            }
             .reduce(0) { $0 + $1.amountCents }
     }
 
@@ -494,7 +510,12 @@ final class LedgerStore: ObservableObject {
         let config = AIParser.Config.load()
         if config.isUsable {
             do {
-                let ai = try await AIParser.parse(text: text, config: config)
+                // 把内置 + 自定义分类一起交给模型，这样「分类」也是 AI 判的
+                let ai = try await AIParser.parse(
+                    text: text,
+                    config: config,
+                    categories: categories.map(\.name)
+                )
                 draft = merge(draft, with: ai)
             } catch {
                 flash("AI 解析失败，已用本地规则")
@@ -518,8 +539,8 @@ final class LedgerStore: ObservableObject {
             result.merchant = ai.merchant
         }
         result.direction = ai.direction
-        if !ai.category.isEmpty, categories.contains(where: { $0.name == ai.category }) {
-            result.category = ai.category
+        if !ai.category.isEmpty, let matched = resolvedCategory(ai.category) {
+            result.category = matched
         }
         if let date = ai.occurredAt {
             result.occurredAt = date
@@ -543,6 +564,21 @@ final class LedgerStore: ObservableObject {
         }
         result.confidence = max(draft.confidence, ai.confidence)
         return result
+    }
+
+    /// 模型给的分类名可能是「餐饮美食」「交通出行」这种带后缀的，做一次宽松匹配
+    private func resolvedCategory(_ raw: String) -> String? {
+        let name = raw
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "类", with: "")
+        guard !name.isEmpty else { return nil }
+        if let exact = categories.first(where: { $0.name == name }) { return exact.name }
+        if let partial = categories.first(where: {
+            name.contains($0.name) || $0.name.contains(name)
+        }) {
+            return partial.name
+        }
+        return nil
     }
 
     /// 把已经解析好的草稿入队（App Intent / 深链接会先覆盖字段再调用这里）

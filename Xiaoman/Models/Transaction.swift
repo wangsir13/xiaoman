@@ -127,6 +127,8 @@ struct Transaction: Identifiable, Codable, Hashable {
     var fingerprint: String = ""
     /// 这笔钱从哪个资产出 / 进（nil 表示没绑定资产）
     var assetID: UUID?
+    /// 固定支出（房租、话费、订阅…）：照常记账，但不占用当月每日预算。用可选类型兼容老数据。
+    var isFixed: Bool?
 
     init(
         id: UUID = UUID(),
@@ -140,7 +142,8 @@ struct Transaction: Identifiable, Codable, Hashable {
         rawText: String = "",
         createdAt: Date = Date(),
         fingerprint: String = "",
-        assetID: UUID? = nil
+        assetID: UUID? = nil,
+        isFixed: Bool? = nil
     ) {
         self.id = id
         self.amountCents = amountCents
@@ -154,7 +157,11 @@ struct Transaction: Identifiable, Codable, Hashable {
         self.createdAt = createdAt
         self.fingerprint = fingerprint
         self.assetID = assetID
+        self.isFixed = isFixed
     }
+
+    /// 老数据里没有这个字段，按「普通支出」处理
+    var isFixedFlag: Bool { isFixed ?? false }
 
     /// 对资产余额的影响：支出为负、收入为正
     var signedCents: Int {

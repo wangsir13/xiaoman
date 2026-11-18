@@ -149,14 +149,18 @@ enum AIParser {
 
     // MARK: - 请求
 
-    static func parse(text: String, config: Config) async throws -> Result {
+    static func parse(
+        text: String,
+        config: Config,
+        categories: [String] = CategoryCatalog.builtin.map(\.name)
+    ) async throws -> Result {
         guard !config.apiKey.isEmpty else { throw AIError.missingKey }
         guard !config.model.isEmpty else { throw AIError.missingModel }
         guard let url = URL(string: config.endpoint) else {
             throw AIError.badPayload("接口地址不合法：\(config.endpoint)")
         }
 
-        let prompt = systemPrompt()
+        let prompt = systemPrompt(categories: categories)
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.timeoutInterval = 30
@@ -210,15 +214,15 @@ enum AIParser {
 
     // MARK: - 提示词
 
-    private static func systemPrompt() -> String {
-        let categories = CategoryCatalog.builtin.map(\.name).joined(separator: "、")
+    private static func systemPrompt(categories: [String]) -> String {
+        let categoryList = categories.joined(separator: "、")
         return """
         你是记账 App 的账单解析器。用户会给你一段从支付截图里 OCR 出来的文字，你只输出一个 JSON 对象，不要任何解释或 Markdown 代码块。
         JSON 字段：
         - amount：数字，单位元，永远为正数，例如 28.5
         - merchant：收款方或商家名称，尽量短；没有就填空字符串
         - direction：expense（支出）或 income（收入）
-        - category：只能从这些里选一个：\(categories)
+        - category：只能从这些里选一个：\(categoryList)（按商户、商品名判断，例如星巴克→餐饮、滴滴→交通、京东→购物、话费→通讯、房租→住房）
         - datetime：yyyy-MM-dd HH:mm:ss；文字里没有就用当前时间
         - asset：付款方式/账户，例如 微信、支付宝、招商银行储蓄卡、信用卡；没有就填空字符串
         - note：补充说明，可空

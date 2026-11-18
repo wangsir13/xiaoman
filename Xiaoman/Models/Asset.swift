@@ -52,6 +52,9 @@ struct Asset: Identifiable, Codable, Hashable {
     var colorHex: String = Asset.palette[0]
     var isArchived: Bool = false
     var createdAt: Date = Date()
+    /// 期初余额从什么时候开始生效：这个时间之前的账单不再扣减余额。
+    /// nil 表示「从最早开始」（老数据）。改期初余额时会写成当前时间。
+    var openingAt: Date?
 
     static let palette: [String] = [
         "2F4EDE", "7C3AD6", "0EA5A5", "E4572E", "E0A800",

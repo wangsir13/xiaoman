@@ -5,6 +5,7 @@ struct AssetsView: View {
     @EnvironmentObject private var store: LedgerStore
     @State private var editingAsset: Asset?
     @State private var showingNew = false
+    @State private var isSorting = false
 
     private var visibleAssets: [Asset] {
         store.assets.filter { !$0.isArchived }
@@ -14,6 +15,9 @@ struct AssetsView: View {
         NavigationStack {
             ZStack {
                 AuroraBackground()
+                if isSorting {
+                    sortingList
+                } else {
                 ScrollView {
                     VStack(spacing: 14) {
                         totalCard
@@ -49,11 +53,18 @@ struct AssetsView: View {
                     .padding(16)
                 }
                 .scrollIndicators(.hidden)
+                }
             }
             .navigationTitle("资产")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(isSorting ? "完成" : "排序") {
+                        withAnimation(.snappy(duration: 0.22)) { isSorting.toggle() }
+                    }
+                    .disabled(visibleAssets.count < 2)
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         showingNew = true
@@ -71,6 +82,39 @@ struct AssetsView: View {
                     .environmentObject(store)
             }
         }
+    }
+
+    private var sortingList: some View {
+        List {
+            Section {
+                ForEach(visibleAssets) { asset in
+                    HStack(spacing: 12) {
+                        Image(systemName: asset.symbol)
+                            .foregroundStyle(Color(hex: asset.colorHex))
+                            .frame(width: 22)
+                        Text(asset.name.isEmpty ? "未命名" : asset.name)
+                        Spacer(minLength: 8)
+                        Text(store.balanceText(of: asset))
+                            .font(.system(size: 13, design: .rounded))
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                    }
+                    .listRowBackground(Theme.cardFill)
+                }
+                .onMove { indices, newOffset in
+                    if let from = indices.first {
+                        store.moveAssets(from: from, to: newOffset)
+                    }
+                }
+            } header: {
+                Text("拖动右侧把手调整顺序")
+            } footer: {
+                Text("顺序会同步到首页的资产卡片。")
+            }
+        }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .environment(\.editMode, .constant(.active))
     }
 
     private var totalCard: some View {
@@ -167,8 +211,8 @@ struct AssetEditorView: View {
                     TextField(kind.isLiability ? "已欠金额，例如 -1500" : "当前余额，例如 3250.80", text: $openingText)
                         .keyboardType(.numbersAndPunctuation)
                         .onChange(of: kind) { newKind in
-                            // 从「银行卡」切成「信用卡」时，把已填的正数直接翻成欠款，省得再手动加负号
-                            guard newKind.isLiability else { return }
+                            // 只有信用卡默认按「欠多少」记，切成信用卡时把已填的正数翻成负数
+                            guard newKind == .creditCard else { return }
                             let trimmed = openingText.trimmingCharacters(in: .whitespacesAndNewlines)
                             guard !trimmed.isEmpty else { return }
                             let hasSign = trimmed.contains("-") || trimmed.contains("−") || trimmed.contains("－")
@@ -179,9 +223,7 @@ struct AssetEditorView: View {
                 } header: {
                     Text("基本信息")
                 } footer: {
-                    Text(kind.isLiability
-                         ? "欠款类资产填正数也记成欠款（例如填 1500 就是 -1500），净资产里自动减掉。"
-                         : "期初余额可以是负数，例如储蓄卡透支；键盘上的减号可以直接输入。")
+                    Text(openingHint)
                 }
 
                 Section {
@@ -241,6 +283,17 @@ struct AssetEditorView: View {
         }
     }
 
+    private var openingHint: String {
+        switch kind {
+        case .creditCard:
+            return "信用卡按「欠多少」记：填正数会自动存成负数（填 1500 就是 -1500），净资产里自动减掉。"
+        case .loan:
+            return "借款：别人欠你的（你借出去的）填正数，你欠别人的填负数，两种都允许。"
+        default:
+            return "期初余额可以是负数，例如储蓄卡透支；键盘上的减号可以直接输入。"
+        }
+    }
+
     private func save() {
         var asset = store.assets.first { $0.id == originalID } ?? Asset()
         asset.id = originalID
@@ -249,8 +302,8 @@ struct AssetEditorView: View {
         let typed = openingText.trimmingCharacters(in: .whitespacesAndNewlines)
         let hasSign = typed.contains("-") || typed.contains("−") || typed.contains("－")
         let parsed = Money.cents(from: typed) ?? 0
-        // 欠款类（信用卡 / 借款）默认按「欠多少」记，填正数也算负数
-        let newOpening = (kind.isLiability && !hasSign) ? -abs(parsed) : parsed
+        // 只有信用卡按「欠多少」自动取负；借款两种方向都合法，不动符号
+        let newOpening = (kind == .creditCard && !hasSign) ? -abs(parsed) : parsed
         // 期初余额一改，就从现在开始生效：之前的账单不再跟着扣减，只有之后的新账会动这个数
         if newOpening != originalOpening {
             asset.openingBalanceCents = newOpening

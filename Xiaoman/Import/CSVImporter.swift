@@ -110,12 +110,14 @@ enum CSVImporter {
         let hint = flat + " " + sourceHint
         let isWechat = hint.contains("微信")
         let isAlipay = hint.contains("支付宝")
-        let source: BillSource = isWechat ? .wechat : (isAlipay ? .alipay : .other)
+        let isMeituan = hint.contains("美团")
+        let source: BillSource = isWechat ? .wechat : (isAlipay ? .alipay : (isMeituan ? .meituan : .other))
 
         let dateColumn = index(in: header, keywords: ["交易时间", "交易创建时间", "付款时间", "记账时间", "日期", "时间"])
-        let amountColumn = index(in: header, keywords: ["金额", "金额(元)", "交易金额"])
-        let directionColumn = index(in: header, keywords: ["收/支", "收支", "收付", "资金方向"])
-        let merchantColumn = index(in: header, keywords: ["交易对方", "对方", "商户名称", "商户", "收款方", "交易对象"])
+        // 「实付金额」要排在「金额」前面，否则会先命中「订单金额」
+        let amountColumn = index(in: header, keywords: ["实付金额", "订单金额", "金额(元)", "交易金额", "金额"])
+        let directionColumn = index(in: header, keywords: ["收/支", "收支", "收付", "资金方向", "收支类型"])
+        let merchantColumn = index(in: header, keywords: ["交易对方", "订单标题", "对方", "商户名称", "商户", "收款方", "交易对象"])
         let noteColumn = index(in: header, keywords: ["商品", "备注", "说明", "交易类型", "商品说明"])
 
         guard let dateColumn, let amountColumn else { throw CSVError.noHeader }
@@ -194,8 +196,12 @@ enum CSVImporter {
     private static func isHeaderRow(_ cells: [String]) -> Bool {
         let compact = cells.joined().replacingOccurrences(of: " ", with: "")
         let hasAmount = compact.contains("金额")
-        let hasDate = compact.contains("交易时间") || compact.contains("日期") || compact.contains("交易对方")
-        return hasAmount && hasDate
+        // 美团那种表头写的是「交易创建时间」，还会带「收/支」列，不能只认「交易时间」
+        let hasDate = compact.contains("时间")
+            || compact.contains("日期")
+            || compact.contains("交易对方")
+            || compact.contains("收/支")
+        return hasAmount && hasDate && cells.count >= 3
     }
 
     private static func index(in header: [String], keywords: [String]) -> Int? {
@@ -208,9 +214,16 @@ enum CSVImporter {
     }
 
     private static func clean(_ value: String) -> String {
-        value
+        var text = value
             .replacingOccurrences(of: "/", with: " ")
+            .replacingOccurrences(of: "	", with: " ")
+            .replacingOccurrences(of: "订单详情", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        // 美团有些标题尾巴带「-4502391563334320787」这种内部编号
+        if let range = text.range(of: #"-[0-9]{8,}$"#, options: .regularExpression) {
+            text = String(text[text.startIndex..<range.lowerBound])
+        }
+        return text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// 处理引号包裹的字段（微信的备注里会有逗号）

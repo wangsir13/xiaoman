@@ -324,7 +324,7 @@ struct SettingsView: View {
             HStack {
                 Text("版本")
                 Spacer()
-                Text("1.0.0 (17)")
+                Text("1.0.0 (18)")
                     .foregroundStyle(.secondary)
             }
         } header: {

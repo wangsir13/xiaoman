@@ -300,6 +300,27 @@ final class LedgerStore: ObservableObject {
 
     // MARK: - 资产
 
+    /// 拖动排序：按可见资产的顺序重排，归档的资产保持原位置不动
+    func moveAssets(from source: Int, to destination: Int) {
+        var visible = assets.filter { !$0.isArchived }
+        guard visible.indices.contains(source) else { return }
+        let item = visible.remove(at: source)
+        let target = max(0, min(visible.count, destination > source ? destination - 1 : destination))
+        visible.insert(item, at: target)
+
+        var iterator = visible.makeIterator()
+        var merged: [Asset] = []
+        for asset in assets {
+            if asset.isArchived {
+                merged.append(asset)
+            } else if let next = iterator.next() {
+                merged.append(next)
+            }
+        }
+        assets = merged
+        saveAssets()
+    }
+
     func asset(for id: UUID?) -> Asset? {
         guard let id = id else { return nil }
         return assets.first { $0.id == id }

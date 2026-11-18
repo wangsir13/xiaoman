@@ -216,7 +216,7 @@ enum CSVImporter {
     private static func clean(_ value: String) -> String {
         var text = value
             .replacingOccurrences(of: "/", with: " ")
-            .replacingOccurrences(of: "\t", with: " ")$
+            .replacingOccurrences(of: "\t", with: " ")
             .replacingOccurrences(of: "订单详情", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         // 美团有些标题尾巴带「-4502391563334320787」这种内部编号

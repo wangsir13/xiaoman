@@ -355,6 +355,18 @@ def main():
     else:
         print(f"视图引用全部有定义：{len(referenced)} 个")
 
+    # 源码里出现制表符 / 其它不可打印字符时，Swift 会报 "unprintable ASCII character"
+    tabbed = []
+    for path in swift_files():
+        text = open(path, encoding="utf-8").read()
+        for number, line in enumerate(text.splitlines(), 1):
+            if "	" in line or any(ord(ch) < 0x20 for ch in line):
+                tabbed.append(f"{path}:{number}")
+    if tabbed:
+        problems.append(f"[源码] 出现制表符或控制字符：{tabbed[:5]}")
+    else:
+        print("源码没有制表符 / 控制字符")
+
     print()
     if problems:
         print("发现问题：")

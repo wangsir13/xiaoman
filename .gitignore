@@ -1,4 +1,4 @@
-cd /workspaces/xiaoman# Xcode
+# Xcode
 build/
 DerivedData/
 *.xcuserstate

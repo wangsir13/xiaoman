@@ -34,12 +34,12 @@ struct BackupView: View {
         .sheet(item: $sharePayload) { payload in
             ActivityView(items: [payload.url])
         }
-        .fileImporter(
-            isPresented: $showingImporter,
-            allowedContentTypes: [.json, .plainText, .data, .item],
-            allowsMultipleSelection: false
-        ) { result in
-            handleImport(result)
+        .sheet(isPresented: $showingImporter) {
+            DocumentPicker(contentTypes: [.item]) { urls in
+                showingImporter = false
+                handleImport(urls)
+            }
+            .ignoresSafeArea()
         }
         .alert("用备份覆盖当前账本？", isPresented: $showingRestoreConfirm) {
             Button("取消", role: .cancel) { pendingData = nil }
@@ -127,33 +127,30 @@ struct BackupView: View {
         sharePayload = SharePayload(url: url)
     }
 
-    private func handleImport(_ result: Result<[URL], Error>) {
-        switch result {
-        case .failure(let error):
-            status = "选择器返回错误：\(error.localizedDescription)"
-            message = "读取失败：\(error.localizedDescription)"
-        case .success(let urls):
-            guard let url = urls.first else {
-                status = "选择器返回了空结果。"
+    private func handleImport(_ urls: [URL]) {
+        guard let url = urls.first else {
+            status = nil
+            return
+        }
+
+        status = "已选择：\(url.lastPathComponent)，正在读取…"
+        do {
+            let data = try Data(contentsOf: url, options: .mappedIfSafe)
+            guard !data.isEmpty else {
+                status = "这个备份是空的（0 字节）。"
+                message = "这个备份是空的（0 字节），可能 iCloud 还没下载完。"
                 return
             }
-            status = "已选择：\(url.lastPathComponent)，正在读取…"
-            let access = url.startAccessingSecurityScopedResource()
-            defer { if access { url.stopAccessingSecurityScopedResource() } }
-            do {
-                let data = try Data(contentsOf: url, options: .mappedIfSafe)
-                pendingData = data
-                pendingSummary = "即将用「\(url.lastPathComponent)」（\(byteText(data.count))）覆盖当前账本，里面的账目、资产、预算和自定义分类都会被替换。"
-                status = "已读取：\(url.lastPathComponent)（\(byteText(data.count))）"
-                // fileImporter 收起动画还没结束时直接弹 alert 会被系统吞掉，等一小会儿再弹
-                Task { @MainActor in
-                    try? await Task.sleep(for: .milliseconds(420))
-                    showingRestoreConfirm = true
-                }
-            } catch {
-                let hint = "如果它存在 iCloud 里，先点一下让它下载完再选。"
-                message = "读不到这个文件：\(error.localizedDescription)\n" + hint
+            pendingData = data
+            pendingSummary = "即将用「\(url.lastPathComponent)」（\(byteText(data.count))）覆盖当前账本，里面的账目、资产、预算和自定义分类都会被替换。"
+            status = "已读取：\(url.lastPathComponent)（\(byteText(data.count))）"
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(320))
+                showingRestoreConfirm = true
             }
+        } catch {
+            status = "读取失败：\(error.localizedDescription)"
+            message = "读不到这个文件：\(error.localizedDescription)"
         }
     }
 

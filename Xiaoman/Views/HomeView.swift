@@ -269,15 +269,20 @@ struct HomeView: View {
                         .foregroundStyle(.secondary)
                 }
             } else {
-                LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
-                    ForEach(Array(store.assets.prefix(assetsExpanded ? store.assets.count : 2))) { asset in
-                        assetChip(asset)
+                if assetsExpanded {
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+                        ForEach(store.assets) { asset in
+                            assetChip(asset)
+                        }
                     }
                 }
-                if store.assets.count > 2 {
-                    expandButton(isExpanded: assetsExpanded, title: assetsExpanded ? "收起" : "展开全部") {
+                // 折叠按钮居中，和上面「概览小卡」的展开按钮对齐
+                HStack {
+                    Spacer(minLength: 0)
+                    expandButton(isExpanded: assetsExpanded, title: assetsExpanded ? "收起" : "展开资产") {
                         withAnimation(.snappy(duration: 0.26)) { assetsExpanded.toggle() }
                     }
+                    Spacer(minLength: 0)
                 }
             }
         }

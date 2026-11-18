@@ -34,12 +34,12 @@ struct CSVImportView: View {
         .navigationTitle("批量导入")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)
-        .fileImporter(
-            isPresented: $showingImporter,
-            allowedContentTypes: [.item],
-            allowsMultipleSelection: false
-        ) { result in
-            handle(result)
+        .sheet(isPresented: $showingImporter) {
+            DocumentPicker(contentTypes: [.item]) { urls in
+                showingImporter = false
+                handle(urls)
+            }
+            .ignoresSafeArea()
         }
         .alert("提示", isPresented: Binding(
             get: { message != nil },
@@ -157,38 +157,33 @@ struct CSVImportView: View {
 
     // MARK: - 动作
 
-    private func handle(_ result: Result<[URL], Error>) {
-        switch result {
-        case .failure(let error):
-            status = "选择器返回错误：\(error.localizedDescription)"
-            message = "读取失败：\(error.localizedDescription)"
-        case .success(let urls):
-            guard let url = urls.first else {
-                status = "选择器返回了空结果。"
+    private func handle(_ urls: [URL]) {
+        guard let url = urls.first else {
+            // 取消选择
+            status = nil
+            return
+        }
+
+        status = "已选择：\(url.lastPathComponent)，正在读取…"
+        busy = true
+        defer { busy = false }
+
+        do {
+            let data = try Data(contentsOf: url, options: .mappedIfSafe)
+            guard !data.isEmpty else {
+                status = "这个文件是空的（0 字节）。"
+                showLater("这个文件是空的（0 字节）。如果它在 iCloud 里，先点一下让它下载完再选。")
                 return
             }
-            status = "已选择：\(url.lastPathComponent)，正在读取…"
-            busy = true
-            defer { busy = false }
-
-            let access = url.startAccessingSecurityScopedResource()
-            defer { if access { url.stopAccessingSecurityScopedResource() } }
-
-            do {
-                let data = try Data(contentsOf: url, options: .mappedIfSafe)
-                guard !data.isEmpty else {
-                    showLater("这个文件是空的（0 字节）。如果它在 iCloud 里，先点一下让它下载完再选。")
-                    return
-                }
-                let parsed = try CSVImporter.parse(data: data, fileName: url.lastPathComponent)
-                rows = parsed
-                fileName = url.lastPathComponent
-                status = "已读取：\(url.lastPathComponent)，识别到 \(parsed.count) 笔" + (parsed.isEmpty ? "（表头没认出来，换个文件试试）" : "")
-            } catch {
-                rows = []
-                status = "读取失败：\(error.localizedDescription)"
-                showLater(error.localizedDescription)
-            }
+            let parsed = try CSVImporter.parse(data: data, fileName: url.lastPathComponent)
+            rows = parsed
+            fileName = url.lastPathComponent
+            status = "已读取：\(url.lastPathComponent)，识别到 \(parsed.count) 笔"
+                + (parsed.isEmpty ? "（表头没认出来，换个文件试试）" : "")
+        } catch {
+            rows = []
+            status = "读取失败：\(error.localizedDescription)"
+            showLater(error.localizedDescription)
         }
     }
 

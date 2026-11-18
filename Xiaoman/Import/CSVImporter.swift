@@ -1,6 +1,6 @@
 import Foundation
 
-/// 把微信 / 支付宝导出的账单 CSV 转成 Transaction
+/// 把微信 / 支付宝 / 银行导出的账单（CSV、xlsx、zip）转成 Transaction
 enum CSVImporter {
 
     struct Row {
@@ -16,20 +16,55 @@ enum CSVImporter {
         case unsupportedEncoding
         case noHeader
         case empty
+        case unsupportedFile
 
         var errorDescription: String? {
             switch self {
             case .unsupportedEncoding:
-                return "这个文件既不是 UTF-8 也不是 GBK，读不出来。用微信/支付宝原始导出的 CSV 试试。"
+                return "这个文件既不是 UTF-8 也不是 GBK，读不出来。用微信/支付宝原始导出的 CSV 或 xlsx 试试。"
             case .noHeader:
-                return "没找到表头。要用微信「账单 → 常见问题 → 下载账单」或支付宝「账单 → 开具交易流水」导出的 CSV。"
+                return "没找到表头。要用微信「账单 → 常见问题 → 下载账单」或支付宝「账单 → 开具交易流水」导出的文件。"
             case .empty:
                 return "文件里没有能识别的账单行。"
+            case .unsupportedFile:
+                return "这个格式暂时不支持。可以选 CSV、xlsx，或者微信导出的 zip。"
             }
         }
     }
 
-    // MARK: - 解码
+    // MARK: - 入口
+
+    /// 按扩展名分派：csv / txt / xlsx / zip
+    static func parse(data: Data, fileName: String) throws -> [Row] {
+        let ext = (fileName as NSString).pathExtension.lowercased()
+
+        switch ext {
+        case "xlsx":
+            let matrix = try XLSXReader.rows(from: data)
+            return try parseMatrix(matrix, sourceHint: fileName)
+
+        case "zip":
+            let entries = try ZipArchive.entries(in: data)
+            if let csv = entries.first(where: { $0.name.lowercased().hasSuffix(".csv") }) {
+                let inner = try ZipArchive.extract(csv, from: data)
+                guard let text = decode(inner) else { throw CSVError.unsupportedEncoding }
+                return try parse(text)
+            }
+            if let xlsx = entries.first(where: { $0.name.lowercased().hasSuffix(".xlsx") }) {
+                let inner = try ZipArchive.extract(xlsx, from: data)
+                let matrix = try XLSXReader.rows(from: inner)
+                return try parseMatrix(matrix, sourceHint: fileName)
+            }
+            throw CSVError.unsupportedFile
+
+        case "xls", "numbers", "pdf":
+            throw CSVError.unsupportedFile
+
+        default:
+            guard let text = decode(data) else { throw CSVError.unsupportedEncoding }
+            return try parse(text)
+        }
+    }
 
     static func decode(_ data: Data) -> String? {
         if let text = String(data: data, encoding: .utf8), !text.contains("\u{FFFD}") {
@@ -57,27 +92,36 @@ enum CSVImporter {
             .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
         guard !lines.isEmpty else { throw CSVError.empty }
 
-        guard let headerIndex = lines.firstIndex(where: isHeader), headerIndex < lines.count else {
+        let matrix = lines.map { fields(of: $0) }
+        return try parseMatrix(matrix, sourceHint: text)
+    }
+
+    /// 行 × 列 的通用入口：CSV 和 xlsx 都走这里
+    static func parseMatrix(_ matrix: [[String]], sourceHint: String) throws -> [Row] {
+        guard !matrix.isEmpty else { throw CSVError.empty }
+
+        guard let headerIndex = matrix.firstIndex(where: isHeaderRow) else {
             throw CSVError.noHeader
         }
 
-        let header = fields(of: lines[headerIndex])
-        let isWechat = header.contains { $0.contains("微信") } || text.contains("微信支付")
-        let isAlipay = header.contains { $0.contains("支付宝") } || text.contains("支付宝")
+        let header = matrix[headerIndex]
 
+        let flat = matrix.prefix(headerIndex + 8).map { $0.joined(separator: " ") }.joined(separator: " ")
+        let hint = flat + " " + sourceHint
+        let isWechat = hint.contains("微信")
+        let isAlipay = hint.contains("支付宝")
         let source: BillSource = isWechat ? .wechat : (isAlipay ? .alipay : .other)
 
-        let dateColumn = index(in: header, keywords: ["交易时间", "交易创建时间", "付款时间", "日期", "时间"])
-        let amountColumn = index(in: header, keywords: ["金额"])
-        let directionColumn = index(in: header, keywords: ["收/支", "收支", "收付"])
-        let merchantColumn = index(in: header, keywords: ["交易对方", "对方", "商户名称", "商户", "收款方"])
-        let noteColumn = index(in: header, keywords: ["商品", "备注", "说明", "交易类型"])
+        let dateColumn = index(in: header, keywords: ["交易时间", "交易创建时间", "付款时间", "记账时间", "日期", "时间"])
+        let amountColumn = index(in: header, keywords: ["金额", "金额(元)", "交易金额"])
+        let directionColumn = index(in: header, keywords: ["收/支", "收支", "收付", "资金方向"])
+        let merchantColumn = index(in: header, keywords: ["交易对方", "对方", "商户名称", "商户", "收款方", "交易对象"])
+        let noteColumn = index(in: header, keywords: ["商品", "备注", "说明", "交易类型", "商品说明"])
 
         guard let dateColumn, let amountColumn else { throw CSVError.noHeader }
 
         var rows: [Row] = []
-        for line in lines[(headerIndex + 1)...] {
-            let cells = fields(of: line)
+        for cells in matrix[(headerIndex + 1)...] {
             guard cells.count > max(dateColumn, amountColumn) else { continue }
 
             let dateCell = cells[dateColumn].trimmingCharacters(in: .whitespaces)
@@ -89,7 +133,7 @@ enum CSVImporter {
             var direction: Direction = .expense
             if let directionColumn, cells.count > directionColumn {
                 let flag = cells[directionColumn]
-                if flag.contains("收入") || flag.contains("入账") {
+                if flag.contains("收入") || flag.contains("入账") || flag.contains("收入/") {
                     direction = .income
                 } else if flag.contains("不计") {
                     continue
@@ -98,14 +142,14 @@ enum CSVImporter {
                 }
             } else if amountCell.contains("+") {
                 direction = .income
+            } else if amountCell.contains("-") {
+                direction = .expense
             }
 
-            let merchant: String = {
-                if let merchantColumn, cells.count > merchantColumn {
-                    return clean(cells[merchantColumn])
-                }
-                return ""
-            }()
+            var merchant = ""
+            if let merchantColumn, cells.count > merchantColumn {
+                merchant = clean(cells[merchantColumn])
+            }
 
             var note = ""
             if let noteColumn, cells.count > noteColumn {
@@ -138,7 +182,7 @@ enum CSVImporter {
                 source: row.source,
                 occurredAt: row.date,
                 note: row.note,
-                rawText: "CSV 导入 · \(row.merchant)"
+                rawText: "账单导入 · \(row.merchant)"
             )
             item.assetID = store.guessAsset(in: row.merchant + " " + row.note)
             return item
@@ -147,9 +191,11 @@ enum CSVImporter {
 
     // MARK: - 小工具
 
-    private static func isHeader(_ line: String) -> Bool {
-        let compact = line.replacingOccurrences(of: " ", with: "")
-        return compact.contains("金额") && (compact.contains("交易时间") || compact.contains("日期") || compact.contains("交易对方"))
+    private static func isHeaderRow(_ cells: [String]) -> Bool {
+        let compact = cells.joined().replacingOccurrences(of: " ", with: "")
+        let hasAmount = compact.contains("金额")
+        let hasDate = compact.contains("交易时间") || compact.contains("日期") || compact.contains("交易对方")
+        return hasAmount && hasDate
     }
 
     private static func index(in header: [String], keywords: [String]) -> Int? {
@@ -209,7 +255,9 @@ enum CSVImporter {
             "yyyy/MM/dd",
             "yyyy年M月d日 HH:mm",
             "yyyy年M月d日 HH:mm:ss",
-            "yyyy年M月d日"
+            "yyyy年M月d日",
+            "M/d/yy H:mm",
+            "M/d/yy"
         ]
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -221,6 +269,13 @@ enum CSVImporter {
                 return date
             }
         }
+
+        // xlsx 里日期可能被存成 Excel 序列号（1900 起算的天数，小数部分是时间）
+        if let serial = Double(text), serial > 25_000, serial < 80_000 {
+            let seconds = (serial - 25_569) * 86_400
+            return Date(timeIntervalSince1970: seconds)
+        }
+
         return nil
     }
 }

@@ -34,7 +34,7 @@ struct CSVImportView: View {
         .toolbarBackground(.hidden, for: .navigationBar)
         .fileImporter(
             isPresented: $showingImporter,
-            allowedContentTypes: [.commaSeparatedText, .plainText, .text],
+            allowedContentTypes: [.item],
             allowsMultipleSelection: false
         ) { result in
             handle(result)
@@ -52,16 +52,16 @@ struct CSVImportView: View {
     private var pickCard: some View {
         GlassCard(padding: 18) {
             VStack(alignment: .leading, spacing: 12) {
-                Text("从微信 / 支付宝导出的 CSV")
+                Text("从微信 / 支付宝导出的账单")
                     .font(.system(size: 15, weight: .semibold, design: .rounded))
-                Text("把以前记的账一次补齐。微信：「我 → 服务 → 钱包 → 账单 → 常见问题 → 下载账单」；支付宝：「我的 → 账单 → 右上角 → 开具交易流水」。导出后选那个 CSV 文件。")
+                Text("把以前记的账一次补齐。微信：「我 → 服务 → 钱包 → 账单 → 常见问题 → 下载账单」；支付宝：「我的 → 账单 → 右上角 → 开具交易流水」。导出后选那个 CSV / xlsx（或微信给的 zip）文件。")
                     .font(.system(size: 12, design: .rounded))
                     .foregroundStyle(.secondary)
 
                 Button {
                     showingImporter = true
                 } label: {
-                    Label(busy ? "正在读取…" : "选择 CSV 文件", systemImage: "doc.badge.plus")
+                    Label(busy ? "正在读取…" : "选择账单文件", systemImage: "doc.badge.plus")
                         .font(.system(size: 14, weight: .semibold, design: .rounded))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
@@ -129,7 +129,7 @@ struct CSVImportView: View {
                 }
             }
             .padding(.horizontal, 14)
-            .glassEffect(.regular, in: .rect(cornerRadius: 24))
+            .glassEffect(.regular, in: .rect(cornerRadius: 24, style: .continuous))
         }
     }
 
@@ -146,7 +146,7 @@ struct CSVImportView: View {
     }
 
     private var noteCard: some View {
-        Text("导入会按「来源 + 金额 + 商户 + 分钟」判重，重复的会自动跳过；已经手动记过的账单不会被覆盖。")
+        Text("支持 CSV、xlsx，以及微信导出的 zip。导入会按「来源 + 金额 + 商户 + 分钟」判重，重复的会自动跳过；已经手动记过的账单不会被覆盖。")
             .font(.system(size: 12, design: .rounded))
             .foregroundStyle(.secondary)
             .padding(.horizontal, 4)
@@ -166,22 +166,27 @@ struct CSVImportView: View {
             let access = url.startAccessingSecurityScopedResource()
             defer { if access { url.stopAccessingSecurityScopedResource() } }
 
-            guard let data = try? Data(contentsOf: url) else {
-                message = "读不到这个文件，换个位置再试。"
-                return
-            }
-            guard let text = CSVImporter.decode(data) else {
-                message = CSVImporter.CSVError.unsupportedEncoding.errorDescription
-                return
-            }
-
             do {
-                rows = try CSVImporter.parse(text)
+                let data = try Data(contentsOf: url, options: .mappedIfSafe)
+                guard !data.isEmpty else {
+                    showLater("这个文件是空的（0 字节）。如果它在 iCloud 里，先点一下让它下载完再选。")
+                    return
+                }
+                let parsed = try CSVImporter.parse(data: data, fileName: url.lastPathComponent)
+                rows = parsed
                 fileName = url.lastPathComponent
             } catch {
                 rows = []
-                message = error.localizedDescription
+                showLater(error.localizedDescription)
             }
+        }
+    }
+
+    /// fileImporter 收起动画期间直接弹 alert 会被系统吞掉，稍等一下再弹
+    private func showLater(_ text: String) {
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(420))
+            message = text
         }
     }
 

@@ -111,7 +111,7 @@ struct GlassCard<Content: View>: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .glassEffect(
                 tint.map { Glass.regular.tint($0.opacity(0.22)) } ?? Glass.regular,
-                in: .rect(cornerRadius: cornerRadius)
+                in: .rect(cornerRadius: cornerRadius, style: .continuous)
             )
     }
 }

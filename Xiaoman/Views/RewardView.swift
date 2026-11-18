@@ -80,7 +80,7 @@ struct RewardView: View {
                 .transition(.opacity)
         }
         .padding(14)
-        .glassEffect(.regular, in: .rect(cornerRadius: 28))
+        .glassEffect(.regular, in: .rect(cornerRadius: 28, style: .continuous))
         .animation(.smooth(duration: 0.25), value: channel)
     }
 

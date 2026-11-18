@@ -268,7 +268,7 @@ struct BudgetView: View {
                 }
             }
             .padding(.horizontal, 14)
-            .glassEffect(.regular, in: .rect(cornerRadius: 26))
+            .glassEffect(.regular, in: .rect(cornerRadius: 26, style: .continuous))
         }
     }
 

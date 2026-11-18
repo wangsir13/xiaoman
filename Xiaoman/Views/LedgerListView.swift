@@ -137,7 +137,7 @@ struct LedgerListView: View {
                     }
                 }
             }
-            .glassEffect(.regular, in: .rect(cornerRadius: 24))
+            .glassEffect(.regular, in: .rect(cornerRadius: 24, style: .continuous))
         }
     }
 
@@ -158,6 +158,6 @@ struct LedgerListView: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 36)
         .padding(.horizontal, 12)
-        .glassEffect(.regular, in: .rect(cornerRadius: 24))
+        .glassEffect(.regular, in: .rect(cornerRadius: 24, style: .continuous))
     }
 }

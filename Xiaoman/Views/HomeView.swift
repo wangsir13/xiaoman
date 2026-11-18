@@ -4,6 +4,9 @@ struct HomeView: View {
 
     @EnvironmentObject private var store: LedgerStore
 
+    @State private var statsExpanded = false
+    @State private var assetsExpanded = false
+
     private var summary: (expense: Int, income: Int) { store.monthSummary() }
     private var totals: [CategoryTotal] { store.expenseByCategory() }
 
@@ -86,41 +89,66 @@ struct HomeView: View {
                     .foregroundStyle(remaining >= 0 ? Theme.income : Theme.expense)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .overlay(alignment: .bottomTrailing) {
+                Text("小满胜万全")
+                    .font(.system(size: 12, weight: .medium, design: .serif))
+                    .tracking(2.5)
+                    .foregroundStyle(Theme.accent.opacity(0.5))
+                    .padding(.trailing, 2)
+                    .padding(.bottom, 2)
+                    .allowsHitTesting(false)
+            }
         }
     }
 
-    // MARK: - 横向小卡
+    // MARK: - 概览小卡（两列，可折叠展开）
+
+    private struct StatItem {
+        let title: String
+        let value: String
+        let symbol: String
+        let tint: Color
+    }
+
+    private var statItems: [StatItem] {
+        [
+            StatItem(title: "今日支出", value: Money.display(store.spentToday()), symbol: "sun.max", tint: Theme.expense),
+            StatItem(title: "本月收入", value: Money.display(summary.income), symbol: "arrow.down.circle", tint: Theme.income),
+            StatItem(title: "本月结余", value: Money.display(summary.income - summary.expense), symbol: "equal.circle", tint: Color(hex: "8B5CF6")),
+            StatItem(title: "净资产", value: Money.display(store.totalBalanceCents), symbol: "chart.pie", tint: Color(hex: "0EA5A5"))
+        ]
+    }
 
     private var quickStats: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 12) {
-                miniStat(
-                    title: "今日支出",
-                    value: Money.display(store.spentToday()),
-                    symbol: "sun.max",
-                    tint: Theme.expense
-                )
-                miniStat(
-                    title: "本月收入",
-                    value: Money.display(summary.income),
-                    symbol: "arrow.down.circle",
-                    tint: Theme.income
-                )
-                miniStat(
-                    title: "本月结余",
-                    value: Money.display(summary.income - summary.expense),
-                    symbol: "equal.circle",
-                    tint: Color(hex: "8B5CF6")
-                )
-                miniStat(
-                    title: "净资产",
-                    value: Money.display(store.totalBalanceCents),
-                    symbol: "chart.pie",
-                    tint: Color(hex: "0EA5A5")
-                )
+        VStack(spacing: 10) {
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+                ForEach(Array(statItems.prefix(statsExpanded ? statItems.count : 2).enumerated()), id: \.offset) { _, item in
+                    miniStat(title: item.title, value: item.value, symbol: item.symbol, tint: item.tint)
+                }
             }
-            .padding(.horizontal, 2)
+            if statItems.count > 2 {
+                expandButton(isExpanded: statsExpanded, title: statsExpanded ? "收起" : "展开更多") {
+                    withAnimation(.snappy(duration: 0.26)) { statsExpanded.toggle() }
+                }
+            }
         }
+    }
+
+    private func expandButton(isExpanded: Bool, title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Text(title)
+                Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                    .font(.system(size: 10, weight: .semibold))
+            }
+            .font(.system(size: 12, weight: .medium, design: .rounded))
+            .foregroundStyle(.secondary)
+            .padding(.vertical, 6)
+            .padding(.horizontal, 14)
+            .glassEffect(.clear, in: .capsule)
+        }
+        .buttonStyle(.plain)
     }
 
     private func miniStat(title: String, value: String, symbol: String, tint: Color) -> some View {
@@ -139,7 +167,7 @@ struct HomeView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
             }
-            .frame(width: 118, alignment: .leading)
+            .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
         }
     }
 
@@ -241,13 +269,15 @@ struct HomeView: View {
                         .foregroundStyle(.secondary)
                 }
             } else {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 12) {
-                        ForEach(store.assets) { asset in
-                            assetChip(asset)
-                        }
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+                    ForEach(Array(store.assets.prefix(assetsExpanded ? store.assets.count : 2))) { asset in
+                        assetChip(asset)
                     }
-                    .padding(.horizontal, 2)
+                }
+                if store.assets.count > 2 {
+                    expandButton(isExpanded: assetsExpanded, title: assetsExpanded ? "收起" : "展开全部") {
+                        withAnimation(.snappy(duration: 0.26)) { assetsExpanded.toggle() }
+                    }
                 }
             }
         }
@@ -270,7 +300,7 @@ struct HomeView: View {
                     .monospacedDigit()
                     .foregroundStyle(balance < 0 ? Theme.expense : .primary)
             }
-            .frame(width: 132, alignment: .leading)
+            .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
         }
     }
 
@@ -305,7 +335,7 @@ struct HomeView: View {
                     }
                 }
                 .padding(14)
-                .glassEffect(.regular, in: .rect(cornerRadius: 26))
+                .glassEffect(.regular, in: .rect(cornerRadius: 26, style: .continuous))
             }
         }
     }

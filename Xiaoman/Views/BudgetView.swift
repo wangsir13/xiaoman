@@ -82,14 +82,16 @@ struct BudgetView: View {
                     Button {
                         clearBeforeToday()
                     } label: {
-                        Label("清空今日前预算", systemImage: "arrow.counterclockwise")
-                            .font(.system(size: 14, weight: .semibold, design: .rounded))
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 9)
+                        Label("重置", systemImage: "arrow.counterclockwise")
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
                     }
                     .buttonStyle(.glass)
+                    .controlSize(.small)
+                    .fixedSize()
 
-                    Text("点一下把今天之前的额度清空：之前的日期不再占额度、也不往后结转，今天重新从「月预算 ÷ 天数」的 \(Money.display(baseDaily)) 开始。")
+                    Text("重置后，今日之前的日期不再占用额度或产生结转，今日额度恢复为「月预算 ÷ 天数」= \(Money.display(baseDaily))。")
                         .font(.system(size: 11, design: .rounded))
                         .foregroundStyle(.secondary)
                 }
@@ -178,7 +180,7 @@ struct BudgetView: View {
                                 .font(.system(size: 12, design: .rounded))
                                 .foregroundStyle(.secondary)
                             Text(today.isOverspent
-                                 ? "超支 \(Money.plain(-today.remainingCents))，明天额度先扣"
+                                 ? "超支 \(Money.plain(-today.remainingCents))，将从明日额度扣除"
                                  : "还剩 \(Money.plain(today.remainingCents))")
                                 .font(.system(size: 12, weight: .medium, design: .rounded))
                                 .foregroundStyle(today.isOverspent ? Theme.expense : Theme.income)
@@ -214,7 +216,7 @@ struct BudgetView: View {
                 if authDenied {
                     HStack(spacing: 6) {
                         Image(systemName: "bell.slash")
-                        Text("通知被关闭了，去系统设置里打开「小满」的通知。")
+                        Text("通知权限已关闭，请在系统设置中开启「小满」的通知。")
                             .font(.system(size: 12, design: .rounded))
                         Spacer()
                         Button("去设置") {

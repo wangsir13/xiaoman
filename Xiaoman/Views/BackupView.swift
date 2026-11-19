@@ -64,7 +64,7 @@ struct BackupView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text("导出备份")
                     .font(.system(size: 15, weight: .semibold, design: .rounded))
-                Text("把 \(store.transactions.count) 笔账、\(store.assets.count) 个资产、预算和分类打包成一个 JSON。续签或换手机前导一份，换回来时直接恢复。")
+                Text("将 \(store.transactions.count) 笔账目、\(store.assets.count) 个资产、预算与分类导出为一个 JSON 文件；续签或更换设备前导出，恢复时直接导入。")
                     .font(.system(size: 12, design: .rounded))
                     .foregroundStyle(.secondary)
 
@@ -86,7 +86,7 @@ struct BackupView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text("从备份恢复")
                     .font(.system(size: 15, weight: .semibold, design: .rounded))
-                Text("选一个之前导出的 xiaoman-backup-*.json，会覆盖当前数据。")
+                Text("选择此前导出的 xiaoman-backup-*.json，将覆盖当前数据。")
                     .font(.system(size: 12, design: .rounded))
                     .foregroundStyle(.secondary)
 
@@ -111,7 +111,7 @@ struct BackupView: View {
     }
 
     private var noteCard: some View {
-        Text("提示：免费证书 7 天过期，续签时用同一个 Bundle ID 覆盖安装不会丢数据；只有卸载重装才会清空，所以「删 App 之前先备份」是最省心的习惯。")
+        Text("提示：免费证书 7 天过期。续签时使用同一 Bundle ID 覆盖安装不会丢失数据；仅卸载重装会清空数据，建议在卸载前先导出备份。")
             .font(.system(size: 12, design: .rounded))
             .foregroundStyle(.secondary)
             .padding(.horizontal, 4)
@@ -137,8 +137,8 @@ struct BackupView: View {
         do {
             let data = try Data(contentsOf: url, options: .mappedIfSafe)
             guard !data.isEmpty else {
-                status = "这个备份是空的（0 字节）。"
-                message = "这个备份是空的（0 字节），可能 iCloud 还没下载完。"
+                status = "备份文件为空（0 字节）。"
+                message = "备份文件为空（0 字节），可能尚未从 iCloud 下载完成。"
                 return
             }
             pendingData = data

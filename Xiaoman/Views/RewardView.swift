@@ -39,7 +39,7 @@ struct RewardView: View {
                     }
                     .buttonStyle(.glass)
 
-                    Text("两个码都是个人收款码，扫任意一个都行，金额随意。谢谢你愿意支持这个小工具 🙏")
+                    Text("以上均为个人收款码，可任选其一扫码，金额不限。感谢支持。")
                         .font(.system(size: 12, design: .rounded))
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)

@@ -78,7 +78,7 @@ struct AboutView: View {
 
                 HStack(spacing: 10) {
                     Button {
-                        copy(coolapkName, hint: "昵称已复制，去酷安搜「\(coolapkName)」")
+                        copy(coolapkName, hint: "昵称已复制，可在酷安搜索「\(coolapkName)」")
                     } label: {
                         Label("复制昵称", systemImage: "doc.on.doc")
                             .font(.system(size: 13, weight: .medium, design: .rounded))
@@ -128,7 +128,7 @@ struct AboutView: View {
                         Text("请我喝杯咖啡")
                             .font(.system(size: 15, weight: .semibold, design: .rounded))
                             .foregroundStyle(.primary)
-                        Text("支付宝 / 微信收款码，随意扫")
+                        Text("支付宝 / 微信收款码")
                             .font(.system(size: 12, design: .rounded))
                             .foregroundStyle(.secondary)
                     }
@@ -151,7 +151,7 @@ struct AboutView: View {
 
             GlassCard(padding: 16) {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("用着不顺手、识别不准、想要什么功能，都可以直接发邮件。")
+                    Text("使用中遇到的问题、识别偏差或功能建议，均可通过邮件反馈。")
                         .font(.system(size: 13, design: .rounded))
                         .foregroundStyle(.secondary)
 
@@ -210,7 +210,7 @@ struct AboutView: View {
                 }
             }
 
-            Text("账目只存在这台手机上，没有账号、没有云端。默认完全离线；只有你自己打开「AI 复核」并填了 Key，才会把账单文字发给你选的那家模型服务商（DeepSeek / GPT / Claude / 豆包）。")
+            Text("账目仅保存在本机，无账号体系、无云端存储。默认完全离线；仅在用户主动开启「AI 复核」并填写 Key 后，才会将账单文字发送至所选模型服务商。")
                 .font(.system(size: 12, design: .rounded))
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 4)
@@ -242,7 +242,7 @@ struct AboutView: View {
         UIApplication.shared.open(url) { ok in
             guard !ok else { return }
             DispatchQueue.main.async {
-                copy(coolapkName, hint: "酷安没装，昵称已复制，去 App Store 搜「酷安」")
+                copy(coolapkName, hint: "未检测到酷安，昵称已复制，可在 App Store 搜索「酷安」")
             }
         }
     }
@@ -259,7 +259,7 @@ struct AboutView: View {
         UIApplication.shared.open(url) { ok in
             guard !ok else { return }
             DispatchQueue.main.async {
-                copy(email, hint: "没装邮件 App，地址已复制")
+                copy(email, hint: "未检测到邮件应用，地址已复制")
             }
         }
     }

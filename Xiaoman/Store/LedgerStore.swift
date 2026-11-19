@@ -550,6 +550,46 @@ final class LedgerStore: ObservableObject {
         return enqueue(draft: draft)
     }
 
+    /// 优先把**截图本身**交给多模态模型（不做 OCR），失败再退回本地 OCR + 文本复核。
+    /// 这样做的好处：商户名、付款方式、金额位置这些 OCR 容易错的细节，模型能直接从像素读。
+    @discardableResult
+    func enqueueVision(_ image: UIImage, sourceHint: BillSource? = nil) async -> ImportDraft {
+        let config = AIParser.Config.load()
+
+        if config.isUsable, config.provider.supportsVision, let jpeg = AIParser.prepare(image) {
+            do {
+                let ai = try await AIParser.parse(
+                    imageJPEG: jpeg,
+                    config: config,
+                    categories: categories.map(\.name)
+                )
+                var draft = ImportDraft()
+                draft.source = sourceHint ?? .other
+                draft.rawText = "（直接识图，未做 OCR）"
+                draft = merge(draft, with: ai)
+                if let assetID = draft.assetID ?? guessAsset(in: draft.merchant) {
+                    draft.assetID = assetID
+                    draft.assetName = asset(for: assetID)?.name ?? draft.assetName
+                }
+                return enqueue(draft: draft)
+            } catch {
+                let reason = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                flash("AI 识图失败，改用本地识别（\(reason)）")
+            }
+        }
+
+        guard let text = try? await ImageOCR.recognizeText(in: image) else {
+            flash("这张图读不出内容")
+            return ImportDraft()
+        }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            flash("截图里没有文字")
+            return ImportDraft()
+        }
+        return await enqueueSmart(text: trimmed, sourceHint: sourceHint)
+    }
+
     /// 把模型的字段合并进本地解析结果：模型给了就用模型的，没给就留本地的。
     private func merge(_ draft: ImportDraft, with ai: AIParser.Result) -> ImportDraft {
         var result = draft

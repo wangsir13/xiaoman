@@ -56,7 +56,7 @@ struct CSVImportView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text("从微信 / 支付宝导出的账单")
                     .font(.system(size: 15, weight: .semibold, design: .rounded))
-                Text("把以前记的账一次补齐。微信：「我 → 服务 → 钱包 → 账单 → 常见问题 → 下载账单」；支付宝：「我的 → 账单 → 右上角 → 开具交易流水」。导出后选那个 CSV / xlsx（或微信给的 zip）文件。")
+                Text("可批量补录历史账单。微信：「我 → 服务 → 钱包 → 账单 → 常见问题 → 下载账单」；支付宝：「我的 → 账单 → 右上角 → 开具交易流水」。导出后选择对应的 CSV / xlsx（或微信导出的 zip）文件。")
                     .font(.system(size: 12, design: .rounded))
                     .foregroundStyle(.secondary)
 
@@ -171,15 +171,15 @@ struct CSVImportView: View {
         do {
             let data = try Data(contentsOf: url, options: .mappedIfSafe)
             guard !data.isEmpty else {
-                status = "这个文件是空的（0 字节）。"
-                showLater("这个文件是空的（0 字节）。如果它在 iCloud 里，先点一下让它下载完再选。")
+                status = "文件为空（0 字节）。"
+                showLater("文件为空（0 字节）。若文件位于 iCloud，请待下载完成后再选择。")
                 return
             }
             let parsed = try CSVImporter.parse(data: data, fileName: url.lastPathComponent)
             rows = parsed
             fileName = url.lastPathComponent
             status = "已读取：\(url.lastPathComponent)，识别到 \(parsed.count) 笔"
-                + (parsed.isEmpty ? "（表头没认出来，换个文件试试）" : "")
+                + (parsed.isEmpty ? "（未能识别表头，请更换文件）" : "")
         } catch {
             rows = []
             status = "读取失败：\(error.localizedDescription)"

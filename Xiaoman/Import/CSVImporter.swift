@@ -21,7 +21,7 @@ enum CSVImporter {
         var errorDescription: String? {
             switch self {
             case .unsupportedEncoding:
-                return "这个文件既不是 UTF-8 也不是 GBK，读不出来。用微信/支付宝原始导出的 CSV 或 xlsx 试试。"
+                return "文件编码无法识别。请使用微信或支付宝原始导出的 CSV 或 xlsx 文件。"
             case .noHeader:
                 return "没找到表头。要用微信「账单 → 常见问题 → 下载账单」或支付宝「账单 → 开具交易流水」导出的文件。"
             case .empty:

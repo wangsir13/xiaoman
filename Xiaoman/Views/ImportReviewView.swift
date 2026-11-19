@@ -20,7 +20,7 @@ struct ImportReviewView: View {
                             }
                         }
                     } footer: {
-                        Text("识别结果仅供参考，保存前请核对金额。原始文字会随账目一起存档，方便以后回溯。")
+                        Text("识别结果仅供参考，保存前请核对金额。原始文本将随账目一并存档，便于日后追溯。")
                     }
                     .listRowBackground(Theme.cardFill)
                 }

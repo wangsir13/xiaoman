@@ -43,7 +43,7 @@ struct MonthReportView: View {
                             .foregroundStyle(Theme.warn)
                     }
 
-                    Text("图片只在本机生成，不会上传。发朋友圈、发群里都行。")
+                    Text("图像仅在本机生成，不会上传。")
                         .font(.system(size: 12, design: .rounded))
                         .foregroundStyle(.secondary)
                         .padding(.bottom, 8)
@@ -127,7 +127,7 @@ struct MonthReportView: View {
                     .foregroundStyle(.white.opacity(0.7))
 
                 if totals.isEmpty {
-                    Text("这个月还没有支出记录。")
+                    Text("本月暂无支出记录。")
                         .font(.system(size: 12, design: .rounded))
                         .foregroundStyle(.white.opacity(0.45))
                 } else {
@@ -269,7 +269,7 @@ struct MonthReportView: View {
         renderer.scale = 3
 
         guard let image = renderer.uiImage, let data = image.pngData() else {
-            failure = "这张图渲染失败了，换成浅一点的内容再试。"
+            failure = "图像渲染失败，请更换内容后重试。"
             return
         }
 

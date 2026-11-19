@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 /// 可选的大模型解析：把 OCR 出来的整段文字交给一家大模型，让它直接给出结构化字段。
 ///
@@ -82,6 +83,25 @@ enum AIParser {
 
         /// 豆包/自定义必须自己填模型，没有默认值
         var requiresModel: Bool { defaultModel.isEmpty }
+
+        /// 能不能直接把截图丢给它读（多模态）。
+        /// DeepSeek 官方接口目前只有文本模型，所以走 OCR + 文本复核那条路。
+        var supportsVision: Bool {
+            switch self {
+            case .deepseek: return false
+            case .openai, .anthropic, .doubao, .custom: return true
+            }
+        }
+
+        var visionHint: String {
+            switch self {
+            case .deepseek: return "DeepSeek 仅提供文本模型，将先执行 OCR 再进行文字复核；如需直接识图，请改用 OpenAI / Claude / 豆包。"
+            case .openai: return "gpt-4o-mini / gpt-4o 都能直接读图"
+            case .anthropic: return "claude-sonnet-4-5 / claude-3-5-sonnet 都支持读图"
+            case .doubao: return "需要填方舟里的视觉接入点（如 doubao-vision 系列的 ep-xxxx）"
+            case .custom: return "接口需要兼容 OpenAI 的 image_url 格式，模型本身也要支持读图"
+            }
+        }
     }
 
     // MARK: - 配置
@@ -125,6 +145,7 @@ enum AIParser {
     enum AIError: LocalizedError {
         case missingKey
         case missingModel
+        case visionUnsupported
         case badStatus(Int, String)
         case badPayload(String)
         case emptyAnswer
@@ -135,6 +156,8 @@ enum AIParser {
                 return "还没填 API Key。"
             case .missingModel:
                 return "还没填模型名。"
+            case .visionUnsupported:
+                return "这家服务商不支持直接读图，请在设置里换成 OpenAI / Claude / 豆包。"
             case .badStatus(let code, let body):
                 let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
                 let short = trimmed.count > 160 ? String(trimmed.prefix(160)) + "…" : trimmed
@@ -142,7 +165,7 @@ enum AIParser {
             case .badPayload(let detail):
                 return "返回内容看不懂：\(detail)"
             case .emptyAnswer:
-                return "模型没给出内容。"
+                return "模型未返回内容。"
             }
         }
     }
@@ -210,6 +233,121 @@ enum AIParser {
         let amount = Money.plain(parsed.amountCents ?? 0)
         let merchant = parsed.merchant.isEmpty ? "未识别商户" : parsed.merchant
         return "¥\(amount) · \(merchant) · \(parsed.category)"
+    }
+
+    /// 连通性测试（读图版）：传一张示例图，看看这一家能不能直接读图。
+    static func testVision(config: Config, image: Data) async throws -> String {
+        let parsed = try await parse(imageJPEG: image, config: config)
+        let amount = Money.plain(parsed.amountCents ?? 0)
+        let merchant = parsed.merchant.isEmpty ? "未识别商户" : parsed.merchant
+        return "¥\(amount) · \(merchant) · \(parsed.category)"
+    }
+
+    // MARK: - 直接读图（多模态）
+
+    /// 把截图压到合适大小再上传：1280 宽、JPEG 0.7。
+    /// 一张 iPhone 截图原图 3~8 MB，base64 之后会更大；压完通常在 200~400 KB，识别率没有肉眼可见的下降。
+    static func prepare(_ image: UIImage, maxWidth: CGFloat = 1280, quality: CGFloat = 0.7) -> Data? {
+        let width = image.size.width * image.scale
+        let ratio = min(1, maxWidth / max(1, width))
+        let target = CGSize(width: image.size.width * ratio, height: image.size.height * ratio)
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        format.opaque = true
+        let renderer = UIGraphicsImageRenderer(size: target, format: format)
+        let scaled = renderer.image { _ in
+            image.draw(in: CGRect(origin: .zero, size: target))
+        }
+        return scaled.jpegData(compressionQuality: quality)
+    }
+
+    /// 直接把截图交给多模态模型，不经过 OCR。
+    static func parse(
+        imageJPEG data: Data,
+        config: Config,
+        categories: [String] = CategoryCatalog.builtin.map(\.name)
+    ) async throws -> Result {
+        guard !config.apiKey.isEmpty else { throw AIError.missingKey }
+        guard !config.model.isEmpty else { throw AIError.missingModel }
+        guard config.provider.supportsVision else { throw AIError.visionUnsupported }
+        guard let url = URL(string: config.endpoint) else {
+            throw AIError.badPayload("接口地址不合法：\(config.endpoint)")
+        }
+
+        let base64 = data.base64EncodedString()
+        let prompt = imagePrompt(categories: categories)
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 60
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        if config.provider.usesAnthropicAPI {
+            request.setValue(config.apiKey, forHTTPHeaderField: "x-api-key")
+            request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+            let body: [String: Any] = [
+                "model": config.model,
+                "max_tokens": 600,
+                "temperature": 0,
+                "system": systemPrompt(categories: categories),
+                "messages": [[
+                    "role": "user",
+                    "content": [
+                        [
+                            "type": "image",
+                            "source": ["type": "base64", "media_type": "image/jpeg", "data": base64]
+                        ],
+                        ["type": "text", "text": prompt]
+                    ]
+                ]]
+            ]
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        } else {
+            request.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
+            var body: [String: Any] = [
+                "model": config.model,
+                "messages": [
+                    ["role": "system", "content": systemPrompt(categories: categories)],
+                    [
+                        "role": "user",
+                        "content": [
+                            ["type": "text", "text": prompt],
+                            ["type": "image_url", "image_url": ["url": "data:image/jpeg;base64,\(base64)"]]
+                        ]
+                    ]
+                ],
+                "temperature": 0,
+                "max_tokens": 600
+            ]
+            if config.provider == .openai {
+                body["response_format"] = ["type": "json_object"]
+            }
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        }
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            throw AIError.badStatus(http.statusCode, String(data: data, encoding: .utf8) ?? "")
+        }
+
+        let content = try answer(from: data, provider: config.provider)
+        return try result(from: content)
+    }
+
+    private static func imagePrompt(categories: [String]) -> String {
+        """
+        这是一张手机支付成功 / 账单详情 / 银行短信的截图。请直接看图，不要做 OCR 转写，把里面的这一笔账读出来。
+        只输出一个 JSON 对象，不要解释、不要 Markdown。
+
+        读数要点：
+        - amount：这一笔实际支付或收到的金额（数字，单位元，正数）。有「实付」「付款金额」「金额」就取那个；别取余额、别取优惠券、别取合计里的小计。
+        - merchant：付款给谁 / 收款方 / 商户全称，照图上的字写，不要自己改写、不要补全简称。取不到就填空字符串。
+        - direction：expense（付款/消费/转账出去）或 income（收款/退款/入账）。
+        - category：只能从这些里选一个：\(categories.joined(separator: "、"))。
+        - datetime：yyyy-MM-dd HH:mm:ss，图上没有就用当前时间。
+        - asset：图上显示的付款方式或账户，比如「微信」「支付宝」「招商银行储蓄卡(1234)」「信用卡」；没有就填空。
+        - note：一两句补充，比如商品名、订单号尾号，可空。
+        - confidence：0 到 1，表示你对这一笔的把握；字太小、被遮挡、信息不全时给 0.5 以下。
+        """
     }
 
     // MARK: - 提示词

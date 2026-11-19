@@ -18,7 +18,7 @@ enum AppLock {
     }
 
     /// 弹系统验证框，成功返回 true
-    static func authenticate(reason: String = "解锁你的记账本") async -> Bool {
+    static func authenticate(reason: String = "验证以解锁账本") async -> Bool {
         let context = LAContext()
         context.localizedCancelTitle = "取消"
         context.localizedFallbackTitle = "输入密码"

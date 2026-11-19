@@ -26,26 +26,15 @@ struct RecordFromScreenshotIntent: AppIntent {
             return .result(dialog: IntentDialog(stringLiteral: "读不到截图：\(loaded.diagnostic)"))
         }
 
-        let text: String
-        do {
-            text = try await ImageOCR.recognizeText(in: image)
-        } catch {
-            let message = "图片识别失败：\(error.localizedDescription)"
-            return .result(dialog: IntentDialog(stringLiteral: message))
-        }
-
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            return .result(dialog: IntentDialog(stringLiteral: "截图里没有可识别的文字。"))
-        }
-
-        let outcome = await record(trimmed)
+        let outcome = await recordImage(image)
         let message: String
-        if outcome.pending {
+        if !outcome.valid && !outcome.pending {
+            message = "未能从截图中识别到金额，请在应用内手动记录。"
+        } else if outcome.pending {
             if outcome.valid {
-                message = "已识别 \(outcome.summary)，等你确认（把握度 \(outcome.confidence)）。"
+                message = "已识别 \(outcome.summary)，等待确认（置信度：\(outcome.confidence)）。"
             } else {
-                message = "没能确认金额，已放到待确认列表，打开 App 手动填一下。"
+                message = "未能确认金额，已加入待确认列表，请在应用内补充。"
             }
         } else {
             let asset = outcome.assetName.isEmpty ? "未绑定资产" : "记在「\(outcome.assetName)」"
@@ -121,7 +110,7 @@ struct RecordFromTextIntent: AppIntent {
         let outcome = await record(text)
         let message: String
         if outcome.pending {
-            message = "已识别 \(outcome.summary)，等你在 App 里确认。"
+            message = "已识别 \(outcome.summary)，等待在应用内确认。"
         } else {
             message = "已记账 \(outcome.summary)。"
         }
@@ -152,11 +141,25 @@ private func record(_ text: String) async -> RecordOutcome {
     )
 }
 
+/// 截图这条路：优先让多模态模型直接看图，不行再走 OCR。
+@MainActor
+private func recordImage(_ image: UIImage) async -> RecordOutcome {
+    let store = LedgerStore()
+    let draft = await store.enqueueVision(image)
+    return RecordOutcome(
+        summary: draft.summaryLine,
+        valid: draft.isValid,
+        pending: store.pendingDrafts.contains { $0.id == draft.id },
+        assetName: draft.assetName,
+        confidence: draft.confidenceText
+    )
+}
+
 /// 查预算：不加小组件也能在桌面/锁屏看今日额度（快捷指令里「显示结果」就行）
 struct CheckBudgetIntent: AppIntent {
 
     static var title: LocalizedStringResource = "查今日额度"
-    static var description: IntentDescription? = IntentDescription("读出今天还能花多少，以及本月剩余预算。")
+    static var description: IntentDescription? = IntentDescription("查询今日剩余额度与本月剩余预算。")
     static var openAppWhenRun: Bool = false
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
@@ -169,7 +172,7 @@ struct CheckBudgetIntent: AppIntent {
 private func budgetLine() -> String {
     let store = LedgerStore()
     guard let today = store.todayBudget else {
-        return "还没设置月度预算，打开 App 的「预算」页填一个数。"
+        return "尚未设置月度预算，请在「预算」页配置。"
     }
     let left = today.remainingCents
     let monthLeft = store.monthRemainingCents

@@ -146,11 +146,11 @@ struct LedgerListView: View {
             Image(systemName: "camera.viewfinder")
                 .font(.system(size: 34))
                 .foregroundStyle(.secondary)
-            Text(store.transactions.isEmpty ? "还没有记录" : "没有匹配的记录")
+            Text(store.transactions.isEmpty ? "暂无记录" : "没有匹配的记录")
                 .font(.system(size: 16, weight: .semibold, design: .rounded))
             Text(store.transactions.isEmpty
                  ? "到「设置 → 用快捷指令 + 双击背面记账」按教程配一次；之后截图交给 App 就能自动入账。"
-                 : "换个关键词试试。")
+                 : "请尝试其他关键词。")
                 .font(.system(size: 13, design: .rounded))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

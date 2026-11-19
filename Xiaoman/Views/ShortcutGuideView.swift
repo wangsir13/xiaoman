@@ -30,9 +30,9 @@ struct ShortcutGuideView: View {
     private var introSection: some View {
         Section {
             VStack(alignment: .leading, spacing: 8) {
-                Text("截图直接交给 App，不存文件")
+                Text("截图直接交给应用，不产生中间文件")
                     .font(.system(size: 15, weight: .semibold, design: .rounded))
-                Text("App 里带了两个系统动作：「小满记账」和「文本记账」。快捷指令把截屏画面的图片直接传给 App，App 内部识别完就落库，全程不落盘、不用切 App。")
+                Text("应用内置两个系统动作：「小满记账」与「文本记账」。快捷指令将截屏图像直接传给应用，由应用内部完成识别并写入账本，全程不产生中间文件，也无需切换应用。")
                     .font(.system(size: 13, design: .rounded))
                     .foregroundStyle(.secondary)
             }
@@ -64,17 +64,17 @@ struct ShortcutGuideView: View {
             stepRow(
                 number: 1,
                 title: "新建快捷指令，先加「听写文本」",
-                detail: "搜「听写文本」，语言选中文（普通话）。它会把你说的「午饭二十八」转成文字。"
+                detail: "搜索「听写文本」，语言选择中文（普通话），即可将语音转为文字。"
             )
             stepRow(
                 number: 2,
                 title: "再接「文本记账」",
-                detail: "搜「文本记账」，把上一步的文字作为「账单文字」传进去。说「星巴克 28.5」这种带金额的句子识别率最高。"
+                detail: "搜索「文本记账」，将上一步的文本传入「账单文字」。包含金额与商户的完整语句识别率最高。"
             )
             stepRow(
                 number: 3,
                 title: "要不要改成 Siri",
-                detail: "在快捷指令里给它起名「记一笔」，之后对 Siri 说「嘿 Siri，记一笔」就能直接说账单。"
+                detail: "在快捷指令中将其命名为「记一笔」，即可通过「嘿 Siri，记一笔」语音录入账单。"
             )
         }
     }
@@ -99,7 +99,7 @@ struct ShortcutGuideView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("另一种用法：文本记账")
                     .font(.system(size: 14, weight: .semibold, design: .rounded))
-                Text("如果只想复制账单文字，用「文本记账」动作，把文字传进去即可；也可以用下面这条 URL 从别的 App 跳进来。")
+                Text("若仅需传递文本，可使用「文本记账」动作；也可通过下方 URL 从其他应用唤起。")
                     .font(.system(size: 12, design: .rounded))
                     .foregroundStyle(.secondary)
                 HStack {
@@ -126,19 +126,19 @@ struct ShortcutGuideView: View {
 
     private var pitfallSection: some View {
         Section("容易踩的坑") {
-            bullet("快捷指令里「询问是否运行」关掉，否则每次都要点确认。")
-            bullet("截屏动作要在「小满记账」之前，顺序反了会拿不到图片。")
-            bullet("金额或商户识别不准时会进「待确认」，不会自动入账，确认页可以改。")
-            bullet("截图时如果系统弹窗、通知横幅把金额挡住了，识别会失败。")
+            bullet("请在快捷指令中关闭「运行前询问」，否则每次执行均需确认。")
+            bullet("「截屏」动作须置于「小满记账」之前，顺序颠倒将无法获取图像。")
+            bullet("金额或商户识别存疑时进入「待确认」，不会自动入账，可在确认页修改。")
+            bullet("若截图时金额被系统弹窗或通知横幅遮挡，识别将失败。")
             bullet("同一笔重复截一次不会重复记账（指纹去重）。")
         }
     }
 
     private var checkSection: some View {
         Section("验收清单") {
-            bullet("轻点背面两下 → 屏幕闪一下截屏 → 顶部出现「已记账 ¥xx」的提示。")
-            bullet("打开 App 首页，能看到这笔账，并且资产余额已经扣减。")
-            bullet("如果没扣资产，说明没识别出是哪个账户，可以去确认页手动选。")
+            bullet("轻点背面两次 → 触发截屏 → 顶部显示「已记账 ¥xx」。")
+            bullet("打开应用首页可查看该笔账目，资产余额已同步扣减。")
+            bullet("若未扣除资产，表示未能识别对应账户，可在确认页手动选择。")
         }
     }
 

@@ -317,9 +317,9 @@ struct HomeView: View {
             if store.transactions.isEmpty {
                 GlassCard {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("还没有记录")
+                        Text("暂无记录")
                             .font(.system(size: 15, weight: .semibold, design: .rounded))
-                        Text("快捷指令里加一个动作：「小满记账」→ 识别截图，双击手机背面就能自动入账；也可以点右上角 + 手动记一笔。")
+                        Text("在快捷指令中添加「小满记账」动作并绑定轻点背面，截图后将自动入账；也可点击右上角 + 手动新增。")
                             .font(.system(size: 13, design: .rounded))
                             .foregroundStyle(.secondary)
                     }

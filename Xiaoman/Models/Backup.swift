@@ -56,7 +56,7 @@ struct BackupEnvelope: Codable {
         if transactions.isEmpty && assets.isEmpty && customCategories.isEmpty && !plan.isConfigured {
             throw DecodingError.dataCorrupted(.init(
                 codingPath: decoder.codingPath,
-                debugDescription: "文件里没有任何账目或资产，不像小满的备份"
+                debugDescription: "文件中不含任何账目或资产，不是有效的备份文件"
             ))
         }
     }

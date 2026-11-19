@@ -143,8 +143,8 @@ struct SettingsView: View {
             Text("记账")
         } footer: {
             Text(autoCommit
-                 ? "把握度 ≥ 80% 且不重复时直接入账，其余先进待确认列表。"
-                 : "每次识别结果都会先放进待确认列表，由你核对后保存。")
+                 ? "置信度 ≥ 80% 且不重复时直接入账，其余进入待确认列表。"
+                 : "每次识别结果均先进入待确认列表，核对后保存。")
         }
         .listRowBackground(Theme.cardFill)
     }
@@ -154,7 +154,8 @@ struct SettingsView: View {
     private var aiSection: some View {
         Section {
             Toggle(isOn: $aiEnabled) {
-                Label("用大模型复核识别结果", systemImage: "sparkles")
+                Label(currentProvider.supportsVision ? "用大模型直接读截图" : "用大模型复核识别结果",
+                      systemImage: "sparkles")
             }
 
             if aiEnabled {
@@ -173,6 +174,13 @@ struct SettingsView: View {
                     aiEndpoint = ""
                     aiMessage = nil
                 }
+
+                Label(currentProvider.supportsVision
+                      ? "截图直接交给模型读，不经过 OCR"
+                      : "先本地 OCR，再把文字交给模型复核",
+                      systemImage: currentProvider.supportsVision ? "eye" : "text.viewfinder")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
 
                 SecureField(currentProvider.keyHint, text: $aiKey)
                     .textInputAutocapitalization(.never)
@@ -255,6 +263,10 @@ struct SettingsView: View {
         if currentProvider == .custom {
             return "填一个 OpenAI 兼容接口即可（地址以 /chat/completions 结尾）。Key 只存在本机。"
         }
+        if currentProvider.supportsVision {
+            return "Key 在 \(url) 申请，只存在本机。"
+                + "截图将直接发送至所选服务商进行识别（\(currentProvider.visionHint)）；关闭开关即恢复完全离线。"
+        }
         return "Key 在 \(url) 申请，只存在本机，只发给这一家。识别时会发账单文字，不发图片。"
     }
 
@@ -273,7 +285,7 @@ struct SettingsView: View {
         } footer: {
             Text(AppLock.isAvailable
                  ? "打开后，每次从后台回到 App 都要验证一次；锁屏界面只显示一个解锁按钮，看不到任何账目。"
-                 : "这台设备还没设置锁屏密码，所以暂时用不了；先去系统设置里加一个密码。")
+                 : "本机尚未设置锁屏密码，暂无法启用；请在系统设置中设置密码。")
         }
         .listRowBackground(Theme.cardFill)
     }
@@ -294,7 +306,7 @@ struct SettingsView: View {
         } header: {
             Text("外观")
         } footer: {
-            Text("跟随系统最省心；深色模式下玻璃和光斑的层次更明显。")
+            Text("跟随系统设置。深色模式下玻璃与光斑层次更明显。")
         }
         .listRowBackground(Theme.cardFill)
     }
@@ -324,13 +336,13 @@ struct SettingsView: View {
             HStack {
                 Text("版本")
                 Spacer()
-                Text("1.0.0 (19)")
+                Text("1.0.0 (21)")
                     .foregroundStyle(.secondary)
             }
         } header: {
             Text("关于")
         } footer: {
-            Text("账目只存在这台手机上，没有账号。默认不联网；只有你自己打开上面的 AI 复核并填了 Key，才会把账单文字发给你选的那家大模型服务商。")
+            Text("账目仅保存在本机，无账号体系。默认不联网；仅在开启 AI 复核并填写 Key 后，才会将账单内容发送至所选服务商。")
         }
         .listRowBackground(Theme.cardFill)
     }
@@ -354,7 +366,7 @@ struct SettingsView: View {
         }
         guard AppLock.isAvailable else {
             appLockEnabled = false
-            store.flash("先给手机设置一个锁屏密码，才能开账本锁")
+            store.flash("请先在系统设置中设置锁屏密码，方可启用账本锁。")
             return
         }
         Task {
@@ -412,15 +424,10 @@ struct SettingsView: View {
         }
         guard let data = try? await item.loadTransferable(type: Data.self),
               let image = UIImage(data: data) else {
-            store.flash("这张图读不出来，换一张试试")
+            store.flash("无法读取该图像，请更换后重试。")
             return
         }
-        do {
-            let text = try await ImageOCR.recognizeText(in: image)
-            await store.enqueueSmart(text: text)
-        } catch {
-            store.flash("识别失败：\(error.localizedDescription)")
-        }
+        await store.enqueueVision(image)
     }
 
 }

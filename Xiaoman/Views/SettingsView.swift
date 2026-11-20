@@ -175,10 +175,8 @@ struct SettingsView: View {
                     aiMessage = nil
                 }
 
-                Label(currentProvider.supportsVision
-                      ? "截图直接交给模型读，不经过 OCR"
-                      : "先本地 OCR，再把文字交给模型复核",
-                      systemImage: currentProvider.supportsVision ? "eye" : "text.viewfinder")
+                Label("截图直接交给模型读；接口不接受图片时自动改用 OCR",
+                      systemImage: "eye")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
 
@@ -336,7 +334,7 @@ struct SettingsView: View {
             HStack {
                 Text("版本")
                 Spacer()
-                Text("1.0.0 (21)")
+                Text("1.0.0 (22)")
                     .foregroundStyle(.secondary)
             }
         } header: {

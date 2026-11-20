@@ -84,18 +84,13 @@ enum AIParser {
         /// 豆包/自定义必须自己填模型，没有默认值
         var requiresModel: Bool { defaultModel.isEmpty }
 
-        /// 能不能直接把截图丢给它读（多模态）。
-        /// DeepSeek 官方接口目前只有文本模型，所以走 OCR + 文本复核那条路。
-        var supportsVision: Bool {
-            switch self {
-            case .deepseek: return false
-            case .openai, .anthropic, .doubao, .custom: return true
-            }
-        }
+        /// 是否尝试把截图直接交给它读（多模态）。
+        /// 现在各家都陆续支持视觉，所以一律先试读图；接口明确拒绝图片时会自动退回 OCR。
+        var supportsVision: Bool { true }
 
         var visionHint: String {
             switch self {
-            case .deepseek: return "DeepSeek 仅提供文本模型，将先执行 OCR 再进行文字复核；如需直接识图，请改用 OpenAI / Claude / 豆包。"
+            case .deepseek: return "deepseek-chat / deepseek-vl 系列可直接读图；若你的 Key 只能调文本模型，接口会拒绝图片并自动改用 OCR"
             case .openai: return "gpt-4o-mini / gpt-4o 都能直接读图"
             case .anthropic: return "claude-sonnet-4-5 / claude-3-5-sonnet 都支持读图"
             case .doubao: return "需要填方舟里的视觉接入点（如 doubao-vision 系列的 ep-xxxx）"
@@ -269,7 +264,6 @@ enum AIParser {
     ) async throws -> Result {
         guard !config.apiKey.isEmpty else { throw AIError.missingKey }
         guard !config.model.isEmpty else { throw AIError.missingModel }
-        guard config.provider.supportsVision else { throw AIError.visionUnsupported }
         guard let url = URL(string: config.endpoint) else {
             throw AIError.badPayload("接口地址不合法：\(config.endpoint)")
         }

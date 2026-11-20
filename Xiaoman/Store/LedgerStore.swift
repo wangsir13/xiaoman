@@ -574,7 +574,14 @@ final class LedgerStore: ObservableObject {
                 return enqueue(draft: draft)
             } catch {
                 let reason = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-                flash("AI 识图失败，改用本地识别（\(reason)）")
+                let lower = reason.lowercased()
+                let refused = lower.contains("image")
+                    || lower.contains("vision")
+                    || lower.contains("modal")
+                    || reason.contains("图片")
+                    || reason.contains("不支持")
+                // 接口不收图片（比如只开了文本模型）和网络/额度问题分开提示，用户才知道该改哪儿
+                flash(refused ? "该接口不接受图片，已改用 OCR 识别" : "识图失败，已改用本地识别")
             }
         }
 
